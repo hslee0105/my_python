@@ -1,6 +1,6 @@
 # Unity 3D 게임 예제 — "Roll & Collect"
 
-Rigidbody 기반 물리 이동, 3인칭 추적 카메라, 회전하는 수집 아이템, 좌우로 순찰하는 장애물, 점수/승리 UI를 갖춘 최소 구성의 3D 게임 예제입니다.
+Rigidbody 기반 물리 이동, 3인칭 추적 카메라, 회전하는 수집 아이템, 좌우로 순찰하는 장애물, 점수/승리 UI, 그리고 제한시간 모드를 갖춘 최소 구성의 3D 게임 예제입니다.
 
 ## 개발 환경
 
@@ -18,7 +18,7 @@ UnityGame/
 │   │   ├── CameraFollow.cs       # 부드러운 3인칭 추적 카메라
 │   │   ├── CollectibleItem.cs    # 회전하는 수집 아이템, 트리거 충돌 시 점수 획득
 │   │   ├── EnemyPatrol.cs        # 좌우로 왕복 이동하는 장애물, 충돌 시 리스폰
-│   │   └── GameManager.cs        # 점수/승리 조건/UI 갱신을 담당하는 싱글턴
+│   │   └── GameManager.cs        # 점수/승리 조건/제한시간/UI 갱신을 담당하는 싱글턴
 │   ├── Materials/                # (선택) 색상 구분용 머티리얼
 │   └── Scenes/                   # 신규 씬을 저장할 위치
 └── .gitignore                    # Unity가 자동 생성하는 Library/Temp 등 제외
@@ -54,11 +54,12 @@ UnityGame/
    - `EnemyPatrol.cs` 스크립트를 추가.
 8. **UI 캔버스**
    - `GameObject > UI > Text` 생성 (자동으로 `Canvas`와 `EventSystem`이 함께 생성됨).
-   - `Canvas` 하위에 Text 2개 배치: `ScoreText`(좌상단), `MessageText`(화면 중앙, 승리 메시지용).
+   - `Canvas` 하위에 Text 3개 배치: `ScoreText`(좌상단), `TimerText`(우상단), `MessageText`(화면 중앙, 승리/게임오버 메시지용).
 9. **GameManager**
    - 빈 `GameObject`를 생성, 이름을 `GameManager`로 변경.
    - `GameManager.cs` 스크립트를 추가.
-   - Inspector에서 `Score Text`에 `ScoreText`를, `Message Text`에 `MessageText`를, `Player Spawn Point`에 플레이어 초기 위치(예: `0, 1, 0`)를 지정.
+   - Inspector에서 `Score Text`에 `ScoreText`를, `Message Text`에 `MessageText`를, `Timer Text`에 `TimerText`를, `Player Spawn Point`에 플레이어 초기 위치(예: `0, 1, 0`)를 지정.
+   - `Use Time Limit` 체크박스로 제한시간 모드 On/Off, `Time Limit Seconds`로 제한 시간(초, 기본 60초)을 조절.
 10. **재생(Play)**: 상단 Play 버튼을 눌러 테스트합니다.
 
 ## 조작법
@@ -75,10 +76,11 @@ UnityGame/
 - **CollectibleItem**: `OnTriggerEnter`에서 태그가 `Player`인 콜라이더만 필터링해 점수를 올리고 자기 자신을 파괴. `Time.deltaTime` 기반 회전으로 시각적 피드백 제공.
 - **EnemyPatrol**: `Mathf.PingPong`으로 왕복 운동을 구현 (별도 상태 머신 없이 시간 함수만으로 좌우 이동 구현).
 - **GameManager**: 싱글턴 패턴(`Instance`)으로 전역 접근을 제공하며, 씬 시작 시 `FindObjectsOfType<CollectibleItem>()`으로 전체 아이템 수를 캐싱해 승리 조건(`score >= total`)을 판정.
+- **제한시간 모드**: `Update()`에서 `Time.deltaTime`만큼 `_timeRemaining`을 감소시키고 `mm:ss` 형식으로 `TimerText`에 표시. 시간이 0이 되면 아직 승리하지 못한 경우 `Time's Up!` 메시지를 띄우고 `_isGameOver` 플래그로 이후의 `AddScore`/`RespawnPlayer` 호출을 무시합니다. 승리·시간초과 두 종료 조건 모두 `Time.timeScale = 0f`로 물리/애니메이션을 포함한 씬 전체를 정지시켜 별도의 입력 잠금 로직 없이 게임을 종료합니다. `Use Time Limit` 체크박스를 끄면 기존처럼 시간 제한 없이 플레이할 수 있습니다.
 
 ## 확장 아이디어
 
 - `NavMeshAgent`를 이용한 적 AI 추적 로직
 - `Cinemachine` 패키지로 카메라 전환을 더 매끄럽게 (충돌 회피 포함)
 - `Rigidbody.AddForce` 대신 `CharacterController`로 전환해 계단/경사 처리 개선
-- 타이머 기반 제한시간 모드 추가 (`GameManager`에 `Time.deltaTime` 카운트다운 추가)
+- 시간 초과 시 재시작 버튼(씬 리로드) 추가
