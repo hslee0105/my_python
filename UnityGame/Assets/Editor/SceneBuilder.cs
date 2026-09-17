@@ -168,7 +168,7 @@ public static class SceneBuilder
 
         Text text = go.GetComponent<Text>();
         text.text = content;
-        text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         text.fontSize = 32;
         text.alignment = alignment;
         text.color = Color.white;
@@ -200,7 +200,7 @@ public static class SceneBuilder
 
         Text label = labelObj.GetComponent<Text>();
         label.text = "Restart";
-        label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         label.fontSize = 28;
         label.alignment = TextAnchor.MiddleCenter;
         label.color = Color.white;

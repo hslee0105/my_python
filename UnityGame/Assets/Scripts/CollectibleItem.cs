@@ -22,7 +22,16 @@ public class CollectibleItem : MonoBehaviour
     {
         if (!other.CompareTag("Player")) return;
 
-        GameManager.Instance.AddScore(scoreValue);
+        if (GameManager.Instance == null)
+        {
+            Debug.LogError("CollectibleItem: no GameManager in the scene (score will not be tracked). " +
+                "Run Tools > Roll & Collect > Build Scene, or add a GameManager object manually.", this);
+        }
+        else
+        {
+            GameManager.Instance.AddScore(scoreValue);
+        }
+
         Destroy(gameObject);
     }
 }
