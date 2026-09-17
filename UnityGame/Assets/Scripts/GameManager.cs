@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 // Central game state: score tracking, win condition, time limit, player respawn.
@@ -11,6 +12,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Text scoreText;
     [SerializeField] private Text messageText;
     [SerializeField] private Text timerText;
+    [SerializeField] private GameObject restartButton;
 
     [Header("Player")]
     [SerializeField] private Vector3 playerSpawnPoint = new Vector3(0f, 1f, 0f);
@@ -43,6 +45,7 @@ public class GameManager : MonoBehaviour
         UpdateScoreUI();
         UpdateTimerUI();
         if (messageText != null) messageText.text = string.Empty;
+        if (restartButton != null) restartButton.SetActive(false);
     }
 
     private void Update()
@@ -100,6 +103,12 @@ public class GameManager : MonoBehaviour
         timerText.text = $"Time: {minutes:00}:{seconds:00}";
     }
 
+    public void RestartGame()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
     private void ShowWinMessage()
     {
         _isGameOver = true;
@@ -107,6 +116,7 @@ public class GameManager : MonoBehaviour
         {
             messageText.text = "You Win! All items collected.";
         }
+        if (restartButton != null) restartButton.SetActive(true);
         Time.timeScale = 0f;
     }
 
@@ -117,6 +127,7 @@ public class GameManager : MonoBehaviour
         {
             messageText.text = $"Time's Up! Score: {_score} / {_totalCollectibles}";
         }
+        if (restartButton != null) restartButton.SetActive(true);
         Time.timeScale = 0f;
     }
 }
