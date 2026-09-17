@@ -19,14 +19,33 @@ UnityGame/
 │   │   ├── CollectibleItem.cs    # 회전하는 수집 아이템, 트리거 충돌 시 점수 획득
 │   │   ├── EnemyPatrol.cs        # 좌우로 왕복 이동하는 장애물, 충돌 시 리스폰
 │   │   └── GameManager.cs        # 점수/승리 조건/제한시간/재시작/UI 갱신을 담당하는 싱글턴
+│   ├── Editor/
+│   │   └── SceneBuilder.cs       # 씬 전체를 자동으로 조립하는 에디터 확장 (Tools 메뉴)
 │   ├── Materials/                # (선택) 색상 구분용 머티리얼
-│   └── Scenes/                   # 신규 씬을 저장할 위치
+│   └── Scenes/                   # 자동/수동으로 생성된 씬이 저장되는 위치
 └── .gitignore                    # Unity가 자동 생성하는 Library/Temp 등 제외
 ```
 
-씬(.unity) 파일은 GUID 기반 바이너리/YAML 직렬화 구조라 에디터 밖에서 안전하게 생성할 수 없으므로, 아래 단계에 따라 Unity 에디터에서 직접 구성합니다. 5~10분이면 충분합니다.
+씬(.unity) 파일 자체는 GUID 기반 바이너리/YAML 직렬화 구조라 텍스트 편집으로 직접 만들 수 없지만, Unity 에디터의 스크립팅 API(`UnityEditor` 네임스페이스)를 이용하면 씬 조립 과정을 코드로 자동화할 수 있습니다. 아래 "빠른 시작"을 따르면 별도의 수동 작업 없이 메뉴 클릭 한 번으로 전체 씬이 생성됩니다.
 
-## 씬 구성 단계
+## 빠른 시작: 자동 씬 생성 (권장)
+
+1. Unity Hub에서 이 `UnityGame` 폴더를 프로젝트로 열면, `Assets/Editor/SceneBuilder.cs`가 자동으로 컴파일됩니다 (컴파일 완료까지 하단 진행 바가 사라질 때까지 잠시 대기).
+2. 에디터 상단 메뉴에서 **Tools > Roll & Collect > Build Scene** 클릭.
+3. 다음이 자동으로 수행됩니다:
+   - `Assets/Scenes/MainScene.unity` 새 씬 생성 (기존 열린 씬에 저장하지 않은 변경사항이 있으면 저장 여부를 묻는 대화상자가 뜰 수 있음)
+   - `Player` 태그가 없으면 TagManager에 자동 등록
+   - Floor(Plane), Player(Sphere + Rigidbody + PlayerController), Main Camera(+ CameraFollow, target = Player), Coin 6개(Trigger + CollectibleItem, 노란색), Enemy(Cube + EnemyPatrol, 빨간색) 생성
+   - Canvas + EventSystem, `ScoreText`/`TimerText`/`MessageText`/`RestartButton`(초기 비활성화) UI 생성
+   - `GameManager` 오브젝트 생성 후 위 UI/설정 값을 `SerializedObject`로 전부 연결 (제한시간 60초, `RestartButton.OnClick → GameManager.RestartGame()` 포함)
+   - 씬을 저장하고 `File > Build Settings`의 씬 목록에 자동 등록
+4. 콘솔에 `Roll & Collect scene built and saved to Assets/Scenes/MainScene.unity. Press Play to test.` 로그가 뜨면 완료. 바로 상단 ▶ Play 버튼을 눌러 플레이합니다.
+
+다시 실행하면 새 씬을 또 만들어 저장하므로, 자동 생성 결과를 손으로 수정한 뒤에는 재실행하지 않도록 주의하세요.
+
+## 수동 씬 구성 단계 (참고용 / 직접 커스터마이징하고 싶을 때)
+
+자동화 스크립트가 만드는 것과 동일한 결과를 손으로 재현하는 절차입니다. 배치나 UI 레이아웃을 다르게 하고 싶을 때 참고하세요.
 
 1. **새 프로젝트 생성**: Unity Hub에서 3D (URP or Built-in) 템플릿으로 새 프로젝트를 만들고, 이 저장소의 `UnityGame/Assets` 폴더 내용을 프로젝트의 `Assets` 폴더로 복사(또는 이 폴더를 그대로 Unity 프로젝트 루트로 열기)합니다.
 2. **씬 생성**: `Assets/Scenes` 에 새 씬(`MainScene`)을 만들고 엽니다.
@@ -81,6 +100,7 @@ UnityGame/
 - **GameManager**: 싱글턴 패턴(`Instance`)으로 전역 접근을 제공하며, 씬 시작 시 `FindObjectsOfType<CollectibleItem>()`으로 전체 아이템 수를 캐싱해 승리 조건(`score >= total`)을 판정.
 - **제한시간 모드**: `Update()`에서 `Time.deltaTime`만큼 `_timeRemaining`을 감소시키고 `mm:ss` 형식으로 `TimerText`에 표시. 시간이 0이 되면 아직 승리하지 못한 경우 `Time's Up!` 메시지를 띄우고 `_isGameOver` 플래그로 이후의 `AddScore`/`RespawnPlayer` 호출을 무시합니다. 승리·시간초과 두 종료 조건 모두 `Time.timeScale = 0f`로 물리/애니메이션을 포함한 씬 전체를 정지시켜 별도의 입력 잠금 로직 없이 게임을 종료합니다. `Use Time Limit` 체크박스를 끄면 기존처럼 시간 제한 없이 플레이할 수 있습니다.
 - **재시작 버튼**: 게임 종료(승리 또는 시간초과) 시 `restartButton.SetActive(true)`로 평소 숨겨져 있던 버튼을 노출합니다. Unity의 UI 이벤트 시스템은 `Time.timeScale`과 무관하게 동작하므로, `Time.timeScale = 0f`로 멈춘 상태에서도 버튼 클릭이 정상적으로 처리됩니다. 버튼의 `OnClick()`에 연결된 `GameManager.RestartGame()`은 `Time.timeScale`을 1로 복구한 뒤 `SceneManager.LoadScene()`으로 현재 씬을 다시 불러와 모든 상태(점수, 타이머, 수집 아이템, 플레이어 위치)를 초기화합니다.
+- **SceneBuilder (에디터 자동화)**: `UnityEditor.EditorSceneManager`로 새 씬을 만들고, `GameObject.CreatePrimitive`/`AddComponent`로 오브젝트와 스크립트를 붙인 뒤, 각 컴포넌트의 `private [SerializeField]` 필드는 `SerializedObject.FindProperty(...).objectReferenceValue = ...` 로 (Inspector에서 드래그하는 것과 동일하게) 값을 주입합니다. 버튼 클릭 이벤트는 `UnityEditor.Events.UnityEventTools.AddPersistentListener`로 등록해 Inspector의 `OnClick()` 리스트에 실제로 나타나는 영구 리스너를 생성합니다. 마지막으로 `EditorSceneManager.SaveScene`과 `EditorBuildSettings.scenes`로 씬을 저장하고 빌드 목록에 등록합니다. `[MenuItem]` 특성이 붙어 있어 `Assets/Editor/` 폴더에 있으면(빌드에서 자동 제외) 에디터 메뉴에 즉시 노출됩니다.
 
 ## 확장 아이디어
 
