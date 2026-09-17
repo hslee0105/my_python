@@ -4,9 +4,10 @@ Rigidbody 기반 물리 이동, 3인칭 추적 카메라, 회전하는 수집 �
 
 ## 개발 환경
 
-- Unity 2021 LTS 또는 2022 LTS (URL: unity.com/download)
+- **Unity 6 (6000.0 LTS) 기준** (URL: unity.com/download)
 - Scripting Backend: Mono (기본값), API Compatibility Level: .NET Standard 2.1 (기본값)
 - 스크립트 언어: C# — Unity 런타임(Mono/IL2CPP)은 C#/UnityScript만 지원하며 Python 바인딩이 없어, 본 예제의 게임 로직은 C#으로 작성했습니다. Python으로 Unity 에디터를 자동화하려면 별도의 `UnityPy`/`pythonnet` 브리지가 필요하지만, 이는 표준 게임 스크립팅 경로가 아니므로 이번 예제에는 포함하지 않았습니다.
+- **Unity 2021/2022 LTS를 쓰는 경우 주의**: Unity 6에서 `Rigidbody.velocity`가 `Rigidbody.linearVelocity`로 이름이 바뀌었습니다 (구 이름은 Unity 6에서 컴파일 **에러**로 처리됨). 이 저장소의 스크립트는 Unity 6 기준으로 `linearVelocity`를 사용하므로, 2021/2022 LTS에서 열면 반대로 컴파일 에러가 납니다 — 그 경우 `PlayerController.cs`와 `GameManager.cs`의 `linearVelocity`를 `velocity`로 되돌려주세요.
 
 ## 폴더 구조
 

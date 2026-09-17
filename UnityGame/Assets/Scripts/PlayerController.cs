@@ -40,9 +40,9 @@ public class PlayerController : MonoBehaviour
     private void FixedUpdate()
     {
         Vector3 targetVelocity = _moveInput * moveSpeed;
-        Vector3 velocity = _rb.velocity;
+        Vector3 velocity = _rb.linearVelocity;
         velocity.x = targetVelocity.x;
         velocity.z = targetVelocity.z;
-        _rb.velocity = velocity;
+        _rb.linearVelocity = velocity;
     }
 }
