@@ -82,7 +82,7 @@ public class GameManager : MonoBehaviour
         if (_isGameOver) return;
 
         Rigidbody rb = player.GetComponent<Rigidbody>();
-        if (rb != null) rb.velocity = Vector3.zero;
+        if (rb != null) rb.linearVelocity = Vector3.zero;
         player.transform.position = playerSpawnPoint;
     }
 
