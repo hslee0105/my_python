@@ -9,16 +9,19 @@ public static class GameObjectFactory
 {
     public static GameObject CreateCoin(Vector3 position)
     {
-        GameObject coin = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        // A flattened Cylinder reads as a coin/disc; CollectibleItem already
+        // spins it around the world Y axis, which — combined with this
+        // shape — looks like a coin lying flat and spinning in place.
+        GameObject coin = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         coin.name = "Coin";
         coin.transform.position = position;
-        coin.transform.localScale = Vector3.one * 0.4f;
+        coin.transform.localScale = new Vector3(0.6f, 0.08f, 0.6f);
 
         Collider collider = coin.GetComponent<Collider>();
         collider.isTrigger = true;
         coin.AddComponent<CollectibleItem>();
 
-        SetColor(coin, Color.yellow);
+        SetColor(coin, new Color(1f, 0.84f, 0.2f)); // warm gold, richer than flat yellow
         return coin;
     }
 

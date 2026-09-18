@@ -18,6 +18,9 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float dashDuration = 0.15f;
     [SerializeField] private float dashCooldown = 1f;
 
+    [Header("Facing")]
+    [SerializeField] private float turnSpeed = 720f;
+
     private Rigidbody _rb;
     private Vector3 _moveInput;
     private bool _isGrounded;
@@ -74,5 +77,12 @@ public class PlayerController : MonoBehaviour
         }
 
         _rb.linearVelocity = velocity;
+
+        Vector3 facingDirection = _dashTimeRemaining > 0f ? _dashDirection : _moveInput;
+        if (facingDirection.sqrMagnitude > 0.01f)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(facingDirection, Vector3.up);
+            _rb.MoveRotation(Quaternion.RotateTowards(_rb.rotation, targetRotation, turnSpeed * Time.fixedDeltaTime));
+        }
     }
 }

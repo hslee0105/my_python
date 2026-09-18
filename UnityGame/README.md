@@ -57,7 +57,7 @@ UnityGame/
 3. 다음이 자동으로 수행됩니다:
    - `Assets/Scenes/MainScene.unity` 새 씬 생성 (기존 열린 씬에 저장하지 않은 변경사항이 있으면 저장 여부를 묻는 대화상자가 뜰 수 있음)
    - `Player` 태그가 없으면 TagManager에 자동 등록
-   - Floor(Plane) 생성 후 `NavMeshSurface`로 즉시 NavMesh를 굽고, Player(Sphere + Rigidbody + PlayerController) 생성
+   - Floor(Plane) 생성 후 `NavMeshSurface`로 즉시 NavMesh를 굽고, Player(Capsule + 구 머리 + 눈 2개로 이루어진 마스코트 캐릭터, Rigidbody + PlayerController) 생성
    - Main Camera에 `CinemachineBrain` 부착 + `CM FollowCamera`(`CinemachineCamera` + `CinemachineFollow` + `CinemachineRotationComposer`, target = Player) 생성
    - 빈 `StageManager` 오브젝트 생성 — 코인/적은 씬에 미리 배치하지 않고, Play를 눌러야 `StageManager.Start()`가 스테이지 1의 코인·적을 랜덤 위치에 실제로 생성함
    - Canvas + EventSystem, `ScoreText`/`TimerText`/`BestTimeText`/`ComboText`/`MessageText`/`RestartButton`(초기 비활성화) UI 생성
@@ -119,7 +119,9 @@ UnityGame/
 ## 동작 원리 요약
 
 - **PlayerController**: `Input.GetAxisRaw`로 수평/수직 입력을 받아 `Rigidbody.velocity`의 X/Z 성분만 직접 갱신 (물리 엔진의 관성/충돌 반응은 유지하면서 즉각적인 반응성을 확보). `Physics.Raycast`로 접지 여부를 판정해 이중 점프를 방지.
+- **캐릭터 방향 전환**: `FixedUpdate()`에서 현재 이동 방향(대시 중이면 대시 방향)을 바라보도록 `Quaternion.LookRotation` + `Quaternion.RotateTowards`로 목표 회전을 계산하고, `Rigidbody.MoveRotation()`으로 적용합니다. `Rigidbody`에 `MoveRotation`을 쓰는 이유는, 물리 엔진이 충돌 등으로 임의로 돌리는 것(예전엔 X/Z만 고정했음)과 구분해서 "게임 로직이 의도한 회전"만 매끄럽게(초당 `turnSpeed`, 기본 720도) 적용하기 위함입니다. Rigidbody의 회전 축을 X/Y/Z 모두 고정해뒀기 때문에 물리 충돌로 캐릭터가 옆으로 넘어지거나 제멋대로 도는 일 없이, 오직 이 스크립트가 원하는 방향으로만 부드럽게 돌아갑니다.
 - **대시**: `Update()`에서 Shift 입력과 쿨다운을 체크해 `_dashDirection`/`_dashTimeRemaining`을 세팅하고, `FixedUpdate()`에서 `_dashTimeRemaining > 0`인 동안은 평소 이동 속도 대신 `dashSpeed`(기본 20)로 X/Z 속도를 덮어씁니다. 이동 입력이 없을 때는 대시가 발동하지 않도록 `_moveInput.sqrMagnitude > 0.01f`로 가드하며, 쿨다운(기본 1초)이 끝나기 전에는 재발동을 막습니다.
+- **캐릭터/코인 모양**: 외부 3D 모델 에셋 없이 기본 프리미티브만으로 조합했습니다. 플레이어는 `Capsule`(몸통) + 자식 `Sphere`(머리, 콜라이더 제거해 순수 시각용) + 눈 역할의 작은 검은 `Sphere` 2개로 구성된 마스코트 캐릭터입니다 (`SceneBuilder.BuildPlayerFace()`). 코인은 `Cube` 대신 아주 얇게 스케일한(`(0.6, 0.08, 0.6)`) `Cylinder`를 써서 동전 모양 디스크로 보이게 했고, `CollectibleItem`이 이미 월드 Y축 기준으로 회전시키고 있어서 코드 변경 없이 "동전이 제자리에서 빙글빙글 도는" 느낌이 그대로 납니다 (`GameObjectFactory.CreateCoin`).
 - **CameraFollow** (수동 버전에서만 사용): `Vector3.SmoothDamp`로 목표 오프셋 위치를 향해 매끄럽게 추적하고, `LookAt`으로 항상 플레이어를 주시.
 - **Cinemachine 카메라 (자동 빌드 기본값)**: 실제 `Camera`에는 `CinemachineBrain`만 부착해 "어떤 가상 카메라가 지금 화면을 제어할지" 결정하는 역할을 맡기고, 별도의 `CM FollowCamera` 오브젝트에 실제 추적 로직을 둡니다. `CinemachineCamera.Follow`/`LookAt`으로 대상을 지정하고, Position Control 역할의 `CinemachineFollow`(오프셋 `(0, 6, -8)` 유지)와 Rotation Control 역할의 `CinemachineRotationComposer`(화면 구도 안에 대상을 계속 붙잡아둠)를 조합합니다. 이 둘의 역할 분리(Follow=위치, RotationComposer=조준)가 Cinemachine 3.x의 표준 카메라 파이프라인 구성 방식입니다.
 - **CollectibleItem**: `OnTriggerEnter`에서 태그가 `Player`인 콜라이더만 필터링해 `GameManager.AddScore()`를 호출하고, 반환된 콤보 수치로 `ProceduralAudio`/`ProceduralEffects`를 재생한 뒤 자기 자신을 파괴. `Time.deltaTime` 기반 회전으로 시각적 피드백 제공.
@@ -145,5 +147,7 @@ UnityGame/
 - 파워업 아이템(무적, 속도 증가, 시간 추가) 추가 — `CollectibleItem`을 상속하거나 별도 컴포넌트로 구현
 - 최고 기록뿐 아니라 최고 점수(`RollCollect_BestScore`)도 별도로 `PlayerPrefs`에 저장해 시간초과/게임오버로 끝난 라운드의 기록도 남기기
 - 대시에 쿨다운 게이지 UI를 추가해 언제 다시 쓸 수 있는지 시각적으로 표시
+- 진짜 사람 모양/리깅된 캐릭터가 필요하다면, `Window > Package Manager > My Assets` (Asset Store 무료 캐릭터를 계정에 추가한 경우) 또는 Mixamo에서 받은 FBX를 `Assets`로 드래그해 임포트한 뒤, `SceneBuilder.BuildPlayer()`가 Capsule을 만드는 대신 그 프리팹을 `Instantiate`하도록 바꾸면 됩니다 (Animator/애니메이션 클립 연결은 별도 작업 필요)
+- 적 큐브도 `GameObjectFactory.CreateEnemy`를 수정해 눈 2개를 붙이거나 다른 프리미티브 조합으로 "괴물처럼" 꾸미기
 - `StageManager.stages`에 스테이지별 제한시간이나 특수 규칙(예: 마지막 스테이지는 시간 보너스 없음)을 추가해 스테이지마다 다른 긴장감 부여
 - `StageManager.RandomSpawnXZ()`가 코인끼리도 최소 거리를 두도록 검사를 추가해 겹쳐서 스폰되는 경우 방지

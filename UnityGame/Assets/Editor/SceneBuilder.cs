@@ -56,16 +56,54 @@ public static class SceneBuilder
 
     private static GameObject BuildPlayer()
     {
-        GameObject player = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        // A Capsule + Sphere head + eyes reads as a simple mascot character
+        // instead of a plain ball; PlayerController turns it to face its
+        // move direction, so the face isn't stuck pointing one way.
+        GameObject player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         player.name = "Player";
         player.transform.position = new Vector3(0f, 1f, 0f);
         player.tag = "Player";
+        GameObjectFactory.SetColor(player, new Color(0.2f, 0.45f, 0.9f));
+
+        BuildPlayerFace(player.transform);
 
         Rigidbody rb = player.AddComponent<Rigidbody>();
-        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationY | RigidbodyConstraints.FreezeRotationZ;
 
-        player.AddComponent<PlayerController>();
+        PlayerController controller = player.AddComponent<PlayerController>();
+
+        // The Capsule's half-height (1) is taller than the Sphere's radius
+        // (0.5) the ground-check distance was originally tuned for.
+        SerializedObject controllerSO = new SerializedObject(controller);
+        controllerSO.FindProperty("groundCheckDistance").floatValue = 1.1f;
+        controllerSO.ApplyModifiedProperties();
+
         return player;
+    }
+
+    private static void BuildPlayerFace(Transform parent)
+    {
+        GameObject head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        head.name = "Head";
+        head.transform.SetParent(parent);
+        head.transform.localPosition = new Vector3(0f, 0.85f, 0f);
+        head.transform.localScale = Vector3.one * 0.55f;
+        Object.DestroyImmediate(head.GetComponent<Collider>());
+        GameObjectFactory.SetColor(head, new Color(0.95f, 0.9f, 0.8f));
+
+        BuildEye(head.transform, new Vector3(0.18f, 0.05f, 0.42f));
+        BuildEye(head.transform, new Vector3(-0.18f, 0.05f, 0.42f));
+    }
+
+    private static void BuildEye(Transform parent, Vector3 localPosition)
+    {
+        GameObject eye = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        eye.name = "Eye";
+        eye.transform.SetParent(parent);
+        eye.transform.localPosition = localPosition;
+        eye.transform.localScale = Vector3.one * 0.18f;
+        Object.DestroyImmediate(eye.GetComponent<Collider>());
+        GameObjectFactory.SetColor(eye, Color.black);
     }
 
     private static void BuildCinemachineCamera(Transform target)
