@@ -1,8 +1,11 @@
 using System.Collections.Generic;
+using Unity.AI.Navigation;
+using Unity.Cinemachine;
 using UnityEditor;
 using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -33,15 +36,15 @@ public static class SceneBuilder
 
         BuildFloor();
         GameObject player = BuildPlayer();
-        BuildCameraFollow(player.transform);
+        BuildCinemachineCamera(player.transform);
         BuildCollectibles();
         BuildEnemy();
 
-        Text scoreText, timerText, messageText;
+        Text scoreText, timerText, bestTimeText, messageText;
         GameObject restartButtonObj;
-        BuildUI(out scoreText, out timerText, out messageText, out restartButtonObj);
+        BuildUI(out scoreText, out timerText, out bestTimeText, out messageText, out restartButtonObj);
 
-        BuildGameManager(scoreText, timerText, messageText, restartButtonObj);
+        BuildGameManager(scoreText, timerText, bestTimeText, messageText, restartButtonObj);
 
         SaveSceneAndRegister(scene);
 
@@ -53,6 +56,10 @@ public static class SceneBuilder
         GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Plane);
         floor.name = "Floor";
         floor.transform.localScale = new Vector3(3f, 1f, 3f);
+
+        NavMeshSurface surface = floor.AddComponent<NavMeshSurface>();
+        surface.BuildNavMesh();
+
         return floor;
     }
 
@@ -70,7 +77,7 @@ public static class SceneBuilder
         return player;
     }
 
-    private static void BuildCameraFollow(Transform target)
+    private static void BuildCinemachineCamera(Transform target)
     {
         Camera mainCamera = Camera.main;
         if (mainCamera == null)
@@ -80,11 +87,17 @@ public static class SceneBuilder
             mainCamera = camObj.AddComponent<Camera>();
             camObj.AddComponent<AudioListener>();
         }
+        mainCamera.gameObject.AddComponent<CinemachineBrain>();
 
-        CameraFollow follow = mainCamera.gameObject.AddComponent<CameraFollow>();
-        SerializedObject camSO = new SerializedObject(follow);
-        camSO.FindProperty("target").objectReferenceValue = target;
-        camSO.ApplyModifiedProperties();
+        GameObject vcamObj = new GameObject("CM FollowCamera");
+        CinemachineCamera vcam = vcamObj.AddComponent<CinemachineCamera>();
+        vcam.Follow = target;
+        vcam.LookAt = target;
+
+        CinemachineFollow follow = vcamObj.AddComponent<CinemachineFollow>();
+        follow.FollowOffset = new Vector3(0f, 6f, -8f);
+
+        vcamObj.AddComponent<CinemachineRotationComposer>();
     }
 
     private static void BuildCollectibles()
@@ -111,9 +124,15 @@ public static class SceneBuilder
     {
         GameObject enemy = GameObject.CreatePrimitive(PrimitiveType.Cube);
         enemy.name = "Enemy";
-        enemy.transform.position = new Vector3(0f, 0.5f, 3f);
-        enemy.AddComponent<EnemyPatrol>();
+        enemy.transform.position = new Vector3(5f, 0f, 5f);
         SetInstanceColor(enemy, Color.red);
+
+        NavMeshAgent agent = enemy.AddComponent<NavMeshAgent>();
+        agent.baseOffset = 0.5f;
+        agent.speed = 3.5f;
+        agent.radius = 0.4f;
+
+        enemy.AddComponent<EnemyChaser>();
     }
 
     private static void SetInstanceColor(GameObject go, Color color)
@@ -123,7 +142,7 @@ public static class SceneBuilder
         renderer.sharedMaterial = instanceMaterial;
     }
 
-    private static void BuildUI(out Text scoreText, out Text timerText, out Text messageText, out GameObject restartButtonObj)
+    private static void BuildUI(out Text scoreText, out Text timerText, out Text bestTimeText, out Text messageText, out GameObject restartButtonObj)
     {
         GameObject canvasObj = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         Canvas canvas = canvasObj.GetComponent<Canvas>();
@@ -145,6 +164,10 @@ public static class SceneBuilder
         timerText = CreateUIText(canvasObj.transform, "TimerText",
             new Vector2(1f, 1f), new Vector2(-150f, -40f), new Vector2(280f, 50f),
             "Time: 01:00", TextAnchor.MiddleRight);
+
+        bestTimeText = CreateUIText(canvasObj.transform, "BestTimeText",
+            new Vector2(0.5f, 1f), new Vector2(0f, -40f), new Vector2(280f, 50f),
+            "Best: --", TextAnchor.MiddleCenter);
 
         messageText = CreateUIText(canvasObj.transform, "MessageText",
             new Vector2(0.5f, 0.5f), new Vector2(0f, 60f), new Vector2(700f, 80f),
@@ -209,7 +232,7 @@ public static class SceneBuilder
         return buttonObj;
     }
 
-    private static void BuildGameManager(Text scoreText, Text timerText, Text messageText, GameObject restartButtonObj)
+    private static void BuildGameManager(Text scoreText, Text timerText, Text bestTimeText, Text messageText, GameObject restartButtonObj)
     {
         GameObject gmObj = new GameObject("GameManager");
         GameManager gameManager = gmObj.AddComponent<GameManager>();
@@ -217,6 +240,7 @@ public static class SceneBuilder
         SerializedObject gmSO = new SerializedObject(gameManager);
         gmSO.FindProperty("scoreText").objectReferenceValue = scoreText;
         gmSO.FindProperty("timerText").objectReferenceValue = timerText;
+        gmSO.FindProperty("bestTimeText").objectReferenceValue = bestTimeText;
         gmSO.FindProperty("messageText").objectReferenceValue = messageText;
         gmSO.FindProperty("restartButton").objectReferenceValue = restartButtonObj;
         gmSO.FindProperty("playerSpawnPoint").vector3Value = new Vector3(0f, 1f, 0f);

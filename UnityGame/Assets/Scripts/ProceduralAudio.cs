@@ -1,0 +1,36 @@
+using UnityEngine;
+
+// Generates short sound effects at runtime so the project ships with
+// zero external audio assets.
+public static class ProceduralAudio
+{
+    private static AudioClip _coinPickupClip;
+
+    public static AudioClip CoinPickupClip => _coinPickupClip != null
+        ? _coinPickupClip
+        : _coinPickupClip = CreateCoinPickupClip();
+
+    private static AudioClip CreateCoinPickupClip()
+    {
+        const int sampleRate = 44100;
+        const float duration = 0.15f;
+        const float startFrequency = 880f;
+        const float endFrequency = 1760f;
+
+        int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] samples = new float[sampleCount];
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float t = i / (float)sampleRate;
+            float progress = t / duration;
+            float frequency = Mathf.Lerp(startFrequency, endFrequency, progress);
+            float envelope = Mathf.Pow(1f - progress, 2f);
+            samples[i] = Mathf.Sin(2f * Mathf.PI * frequency * t) * envelope;
+        }
+
+        AudioClip clip = AudioClip.Create("CoinPickup", sampleCount, 1, sampleRate, false);
+        clip.SetData(samples, 0);
+        return clip;
+    }
+}

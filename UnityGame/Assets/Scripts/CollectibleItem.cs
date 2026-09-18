@@ -32,6 +32,9 @@ public class CollectibleItem : MonoBehaviour
             GameManager.Instance.AddScore(scoreValue);
         }
 
+        AudioSource.PlayClipAtPoint(ProceduralAudio.CoinPickupClip, transform.position);
+        ProceduralEffects.SpawnPickupBurst(transform.position, Color.yellow);
+
         Destroy(gameObject);
     }
 }

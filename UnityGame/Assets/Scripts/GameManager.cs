@@ -8,10 +8,13 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
+    private const string BestTimeKey = "RollCollect_BestTime";
+
     [Header("UI References")]
     [SerializeField] private Text scoreText;
     [SerializeField] private Text messageText;
     [SerializeField] private Text timerText;
+    [SerializeField] private Text bestTimeText;
     [SerializeField] private GameObject restartButton;
 
     [Header("Player")]
@@ -24,6 +27,7 @@ public class GameManager : MonoBehaviour
     private int _score;
     private int _totalCollectibles;
     private float _timeRemaining;
+    private float _elapsedTime;
     private bool _isGameOver;
 
     private void Awake()
@@ -44,13 +48,18 @@ public class GameManager : MonoBehaviour
 
         UpdateScoreUI();
         UpdateTimerUI();
+        UpdateBestTimeUI();
         if (messageText != null) messageText.text = string.Empty;
         if (restartButton != null) restartButton.SetActive(false);
     }
 
     private void Update()
     {
-        if (_isGameOver || !useTimeLimit) return;
+        if (_isGameOver) return;
+
+        _elapsedTime += Time.deltaTime;
+
+        if (!useTimeLimit) return;
 
         _timeRemaining -= Time.deltaTime;
         if (_timeRemaining <= 0f)
@@ -103,6 +112,15 @@ public class GameManager : MonoBehaviour
         timerText.text = $"Time: {minutes:00}:{seconds:00}";
     }
 
+    private void UpdateBestTimeUI()
+    {
+        if (bestTimeText == null) return;
+
+        bestTimeText.text = PlayerPrefs.HasKey(BestTimeKey)
+            ? $"Best: {PlayerPrefs.GetFloat(BestTimeKey):0.0}s"
+            : "Best: --";
+    }
+
     public void RestartGame()
     {
         Time.timeScale = 1f;
@@ -112,9 +130,20 @@ public class GameManager : MonoBehaviour
     private void ShowWinMessage()
     {
         _isGameOver = true;
+
+        bool isNewBest = !PlayerPrefs.HasKey(BestTimeKey) || _elapsedTime < PlayerPrefs.GetFloat(BestTimeKey);
+        if (isNewBest)
+        {
+            PlayerPrefs.SetFloat(BestTimeKey, _elapsedTime);
+            PlayerPrefs.Save();
+            UpdateBestTimeUI();
+        }
+
         if (messageText != null)
         {
-            messageText.text = "You Win! All items collected.";
+            messageText.text = isNewBest
+                ? $"You Win! New Best Time: {_elapsedTime:0.0}s!"
+                : $"You Win! Time: {_elapsedTime:0.0}s";
         }
         if (restartButton != null) restartButton.SetActive(true);
         Time.timeScale = 0f;

@@ -1,6 +1,6 @@
 # Unity 3D 게임 예제 — "Roll & Collect"
 
-Rigidbody 기반 물리 이동, 3인칭 추적 카메라, 회전하는 수집 아이템, 좌우로 순찰하는 장애물, 점수/승리 UI, 제한시간 모드, 그리고 재시작 버튼을 갖춘 최소 구성의 3D 게임 예제입니다.
+Rigidbody 기반 물리 이동, Cinemachine 3인칭 추적 카메라, 회전하는 수집 아이템(픽업 사운드·파티클 포함), NavMeshAgent로 플레이어를 추적하는 장애물, 점수/승리 UI, 제한시간 모드, PlayerPrefs 기반 최고 기록, 그리고 재시작 버튼을 갖춘 3D 게임 예제입니다.
 
 ## 개발 환경
 
@@ -11,6 +11,19 @@ Rigidbody 기반 물리 이동, 3인칭 추적 카메라, 회전하는 수집 �
 - **Unity 6.5(6000.5) 이상 주의**: `com.unity.ugui`(Unity UI) 패키지가 렌더 파이프라인 패키지 의존성에서 분리되었습니다. `UnityEngine.UI` 네임스페이스를 찾을 수 없다는 `CS0234` 에러가 나면, `Window > Package Manager > + > Add package by name...`에서 `com.unity.ugui`를 직접 설치해야 합니다.
 - 내장 폰트 리소스 이름 `"Arial.ttf"`는 최근 Unity 버전에서 폐지되어 `"LegacyRuntime.ttf"`로 대체되었습니다 (`SceneBuilder.cs`는 이미 `LegacyRuntime.ttf`를 사용하도록 반영되어 있음) — 옛 이름을 쓰면 폰트가 null이 되어 UI 텍스트가 화면에 전혀 렌더링되지 않습니다.
 
+### 추가로 필요한 패키지 (Cinemachine 카메라 · NavMeshAgent 추적 AI)
+
+`SceneBuilder.cs`는 이제 아래 두 패키지의 타입을 직접 참조합니다. **Build Scene을 실행하기 전에 먼저 설치**해주세요 (`Window > Package Manager > + > Add package by name...`에 아래 이름을 정확히 입력):
+
+| 패키지 이름 | 용도 |
+|---|---|
+| `com.unity.cinemachine` | 3인칭 추적 카메라 (Cinemachine 3.x, Unity 6과 함께 배포되는 버전) |
+| `com.unity.ai.navigation` | `NavMeshSurface`로 바닥을 NavMesh로 굽는 데 사용 (에디터 전용) |
+
+이 두 패키지가 없으면 `Assets/Editor/SceneBuilder.cs`가 컴파일되지 않아 `Tools > Roll & Collect > Build Scene` 메뉴 자체가 사라집니다. 다만 이 파일은 **에디터 전용 어셈블리**에만 속해 있어서, 패키지가 없어도 `Assets/Scripts` 아래의 런타임 스크립트(`PlayerController.cs` 등)나 이미 저장된 `MainScene.unity`는 영향받지 않습니다 — 즉 패키지 설치 전에 이미 빌드해둔 씬은 계속 Play해서 테스트할 수 있습니다.
+
+`UnityEngine.AI.NavMeshAgent`(적 추적 스크립트 `EnemyChaser.cs`가 사용) 자체는 Unity 코어 모듈에 포함되어 있어 별도 패키지가 필요 없습니다 — `com.unity.ai.navigation`은 오직 NavMesh를 "굽는(bake)" `NavMeshSurface` 컴포넌트에만 필요합니다.
+
 ## 폴더 구조
 
 ```
@@ -18,10 +31,13 @@ UnityGame/
 ├── Assets/
 │   ├── Scripts/
 │   │   ├── PlayerController.cs   # WASD 이동 + Space 점프 (Rigidbody 물리)
-│   │   ├── CameraFollow.cs       # 부드러운 3인칭 추적 카메라
-│   │   ├── CollectibleItem.cs    # 회전하는 수집 아이템, 트리거 충돌 시 점수 획득
-│   │   ├── EnemyPatrol.cs        # 좌우로 왕복 이동하는 장애물, 충돌 시 리스폰
-│   │   └── GameManager.cs        # 점수/승리 조건/제한시간/재시작/UI 갱신을 담당하는 싱글턴
+│   │   ├── CameraFollow.cs       # (더 이상 자동 빌드에선 안 씀) 패키지 없는 SmoothDamp 추적 카메라 대안
+│   │   ├── CollectibleItem.cs    # 회전하는 수집 아이템, 트리거 충돌 시 점수+사운드+파티클
+│   │   ├── EnemyPatrol.cs        # (더 이상 자동 빌드에선 안 씀) 패키지 없는 좌우 왕복 장애물 대안
+│   │   ├── EnemyChaser.cs        # NavMeshAgent로 플레이어를 실시간 추적하는 장애물
+│   │   ├── ProceduralAudio.cs    # 외부 오디오 파일 없이 코드로 코인 획득 효과음 생성
+│   │   ├── ProceduralEffects.cs  # 내장 ParticleSystem으로 코인 획득 파티클 생성
+│   │   └── GameManager.cs        # 점수/승리 조건/제한시간/최고기록(PlayerPrefs)/재시작/UI 갱신을 담당하는 싱글턴
 │   ├── Editor/
 │   │   └── SceneBuilder.cs       # 씬 전체를 자동으로 조립하는 에디터 확장 (Tools 메뉴)
 │   ├── Materials/                # (선택) 색상 구분용 머티리얼
@@ -38,17 +54,19 @@ UnityGame/
 3. 다음이 자동으로 수행됩니다:
    - `Assets/Scenes/MainScene.unity` 새 씬 생성 (기존 열린 씬에 저장하지 않은 변경사항이 있으면 저장 여부를 묻는 대화상자가 뜰 수 있음)
    - `Player` 태그가 없으면 TagManager에 자동 등록
-   - Floor(Plane), Player(Sphere + Rigidbody + PlayerController), Main Camera(+ CameraFollow, target = Player), Coin 6개(Trigger + CollectibleItem, 노란색), Enemy(Cube + EnemyPatrol, 빨간색) 생성
-   - Canvas + EventSystem, `ScoreText`/`TimerText`/`MessageText`/`RestartButton`(초기 비활성화) UI 생성
+   - Floor(Plane) 생성 후 `NavMeshSurface`로 즉시 NavMesh를 굽고, Player(Sphere + Rigidbody + PlayerController) 생성
+   - Main Camera에 `CinemachineBrain` 부착 + `CM FollowCamera`(`CinemachineCamera` + `CinemachineFollow` + `CinemachineRotationComposer`, target = Player) 생성
+   - Coin 6개(Trigger + CollectibleItem, 노란색 — 획득 시 절차적 효과음 + 파티클 재생), Enemy(Cube + NavMeshAgent + EnemyChaser, 빨간색, 플레이어를 실시간 추적) 생성
+   - Canvas + EventSystem, `ScoreText`/`TimerText`/`BestTimeText`/`MessageText`/`RestartButton`(초기 비활성화) UI 생성
    - `GameManager` 오브젝트 생성 후 위 UI/설정 값을 `SerializedObject`로 전부 연결 (제한시간 60초, `RestartButton.OnClick → GameManager.RestartGame()` 포함)
    - 씬을 저장하고 `File > Build Settings`의 씬 목록에 자동 등록
 4. 콘솔에 `Roll & Collect scene built and saved to Assets/Scenes/MainScene.unity. Press Play to test.` 로그가 뜨면 완료. 바로 상단 ▶ Play 버튼을 눌러 플레이합니다.
 
 다시 실행하면 새 씬을 또 만들어 저장하므로, 자동 생성 결과를 손으로 수정한 뒤에는 재실행하지 않도록 주의하세요.
 
-## 수동 씬 구성 단계 (참고용 / 직접 커스터마이징하고 싶을 때)
+## 수동 씬 구성 단계 (참고용 / 패키지 없이 단순 버전을 원할 때)
 
-자동화 스크립트가 만드는 것과 동일한 결과를 손으로 재현하는 절차입니다. 배치나 UI 레이아웃을 다르게 하고 싶을 때 참고하세요.
+아래 절차는 **Cinemachine과 AI Navigation 패키지를 설치하지 않고도** 만들 수 있는, 조금 더 단순한 원본 버전(고정 오프셋 카메라 `CameraFollow.cs` + 좌우 왕복 장애물 `EnemyPatrol.cs`)을 손으로 재현하는 방법입니다. 지금의 자동 빌드 결과(Cinemachine 카메라, NavMeshAgent 추적 AI)와는 다르니, 두 패키지 설치가 부담스럽다면 이 절차를 참고해 직접 조립하세요.
 
 1. **새 프로젝트 생성**: Unity Hub에서 3D (URP or Built-in) 템플릿으로 새 프로젝트를 만들고, 이 저장소의 `UnityGame/Assets` 폴더 내용을 프로젝트의 `Assets` 폴더로 복사(또는 이 폴더를 그대로 Unity 프로젝트 루트로 열기)합니다.
 2. **씬 생성**: `Assets/Scenes` 에 새 씬(`MainScene`)을 만들고 엽니다.
@@ -97,17 +115,23 @@ UnityGame/
 ## 동작 원리 요약
 
 - **PlayerController**: `Input.GetAxisRaw`로 수평/수직 입력을 받아 `Rigidbody.velocity`의 X/Z 성분만 직접 갱신 (물리 엔진의 관성/충돌 반응은 유지하면서 즉각적인 반응성을 확보). `Physics.Raycast`로 접지 여부를 판정해 이중 점프를 방지.
-- **CameraFollow**: `Vector3.SmoothDamp`로 목표 오프셋 위치를 향해 매끄럽게 추적하고, `LookAt`으로 항상 플레이어를 주시.
-- **CollectibleItem**: `OnTriggerEnter`에서 태그가 `Player`인 콜라이더만 필터링해 점수를 올리고 자기 자신을 파괴. `Time.deltaTime` 기반 회전으로 시각적 피드백 제공.
-- **EnemyPatrol**: `Mathf.PingPong`으로 왕복 운동을 구현 (별도 상태 머신 없이 시간 함수만으로 좌우 이동 구현).
-- **GameManager**: 싱글턴 패턴(`Instance`)으로 전역 접근을 제공하며, 씬 시작 시 `FindObjectsOfType<CollectibleItem>()`으로 전체 아이템 수를 캐싱해 승리 조건(`score >= total`)을 판정.
+- **CameraFollow** (수동 버전에서만 사용): `Vector3.SmoothDamp`로 목표 오프셋 위치를 향해 매끄럽게 추적하고, `LookAt`으로 항상 플레이어를 주시.
+- **Cinemachine 카메라 (자동 빌드 기본값)**: 실제 `Camera`에는 `CinemachineBrain`만 부착해 "어떤 가상 카메라가 지금 화면을 제어할지" 결정하는 역할을 맡기고, 별도의 `CM FollowCamera` 오브젝트에 실제 추적 로직을 둡니다. `CinemachineCamera.Follow`/`LookAt`으로 대상을 지정하고, Position Control 역할의 `CinemachineFollow`(오프셋 `(0, 6, -8)` 유지)와 Rotation Control 역할의 `CinemachineRotationComposer`(화면 구도 안에 대상을 계속 붙잡아둠)를 조합합니다. 이 둘의 역할 분리(Follow=위치, RotationComposer=조준)가 Cinemachine 3.x의 표준 카메라 파이프라인 구성 방식입니다.
+- **CollectibleItem**: `OnTriggerEnter`에서 태그가 `Player`인 콜라이더만 필터링해 점수를 올리고, `ProceduralAudio`/`ProceduralEffects`로 효과음·파티클을 재생한 뒤 자기 자신을 파괴. `Time.deltaTime` 기반 회전으로 시각적 피드백 제공.
+- **ProceduralAudio**: `AudioClip.Create`로 샘플 배열(사인파 + 상승하는 주파수 + 제곱 감쇠 엔벌로프)을 직접 채워 짧은 "띵" 효과음을 생성합니다. 외부 오디오 에셋이 전혀 없어도 동작하며, 한 번 생성한 클립은 static 필드에 캐싱해 재사용합니다. `AudioSource.PlayClipAtPoint`로 재생하는데, 이 API는 임시 오브젝트를 만들어 재생 후 스스로 파괴하므로 `Destroy(gameObject)`로 코인이 즉시 사라져도 소리가 끊기지 않습니다.
+- **ProceduralEffects**: 내장 `ParticleSystem`을 코드로 구성(짧은 버스트, 구형 방출, `Sprites/Default` 셰이더)해 코인 위치에 파티클을 터뜨립니다. `ParticleSystemStopAction.Destroy`를 설정해 재생이 끝나면 별도 타이머 없이 오브젝트가 자동으로 사라집니다.
+- **EnemyPatrol** (수동 버전에서만 사용): `Mathf.PingPong`으로 왕복 운동을 구현 (별도 상태 머신 없이 시간 함수만으로 좌우 이동 구현).
+- **EnemyChaser (NavMeshAgent)**: `Awake()`에서 `Player` 태그로 플레이어를 찾아두고, `repathInterval`(기본 0.2초)마다 `NavMeshAgent.SetDestination(player.position)`을 호출해 목적지를 갱신합니다. 매 프레임 재계산하지 않고 일정 간격으로만 경로를 다시 잡아 CPU 비용을 줄이는, 실무에서 흔히 쓰는 최적화 패턴입니다. `NavMeshSurface.BuildNavMesh()`로 미리 구워둔 바닥 위를 자율적으로 길찾기하며 이동하고, `OnCollisionEnter`로 플레이어와 부딪히면 리스폰시킵니다.
+- **GameManager**: 싱글턴 패턴(`Instance`)으로 전역 접근을 제공하며, 씬 시작 시 `FindObjectsOfType<CollectibleItem>()`으로 전체 아이템 수를 캐싱해 승리 조건(`score >= total`)을 판정. 매 프레임 `_elapsedTime`을 누적해 실제 플레이 시간을 추적합니다(제한시간 모드를 꺼도 계속 기록됨).
+- **최고 기록 (PlayerPrefs)**: 승리 시 `_elapsedTime`을 `PlayerPrefs`의 `RollCollect_BestTime` 키에 저장된 이전 최고 기록과 비교해, 더 빠르면 갱신하고 "New Best Time!" 메시지를 보여줍니다. `PlayerPrefs`는 macOS에서는 `~/Library/Preferences/`, Windows에서는 레지스트리에 저장되어 에디터를 재시작하거나 씬을 재시작해도 유지됩니다. 화면 상단 중앙의 `BestTimeText`가 기록이 없으면 `Best: --`, 있으면 `Best: 12.3s` 형태로 항상 표시됩니다.
 - **제한시간 모드**: `Update()`에서 `Time.deltaTime`만큼 `_timeRemaining`을 감소시키고 `mm:ss` 형식으로 `TimerText`에 표시. 시간이 0이 되면 아직 승리하지 못한 경우 `Time's Up!` 메시지를 띄우고 `_isGameOver` 플래그로 이후의 `AddScore`/`RespawnPlayer` 호출을 무시합니다. 승리·시간초과 두 종료 조건 모두 `Time.timeScale = 0f`로 물리/애니메이션을 포함한 씬 전체를 정지시켜 별도의 입력 잠금 로직 없이 게임을 종료합니다. `Use Time Limit` 체크박스를 끄면 기존처럼 시간 제한 없이 플레이할 수 있습니다.
 - **재시작 버튼**: 게임 종료(승리 또는 시간초과) 시 `restartButton.SetActive(true)`로 평소 숨겨져 있던 버튼을 노출합니다. Unity의 UI 이벤트 시스템은 `Time.timeScale`과 무관하게 동작하므로, `Time.timeScale = 0f`로 멈춘 상태에서도 버튼 클릭이 정상적으로 처리됩니다. 버튼의 `OnClick()`에 연결된 `GameManager.RestartGame()`은 `Time.timeScale`을 1로 복구한 뒤 `SceneManager.LoadScene()`으로 현재 씬을 다시 불러와 모든 상태(점수, 타이머, 수집 아이템, 플레이어 위치)를 초기화합니다.
 - **SceneBuilder (에디터 자동화)**: `UnityEditor.EditorSceneManager`로 새 씬을 만들고, `GameObject.CreatePrimitive`/`AddComponent`로 오브젝트와 스크립트를 붙인 뒤, 각 컴포넌트의 `private [SerializeField]` 필드는 `SerializedObject.FindProperty(...).objectReferenceValue = ...` 로 (Inspector에서 드래그하는 것과 동일하게) 값을 주입합니다. 버튼 클릭 이벤트는 `UnityEditor.Events.UnityEventTools.AddPersistentListener`로 등록해 Inspector의 `OnClick()` 리스트에 실제로 나타나는 영구 리스너를 생성합니다. 마지막으로 `EditorSceneManager.SaveScene`과 `EditorBuildSettings.scenes`로 씬을 저장하고 빌드 목록에 등록합니다. `[MenuItem]` 특성이 붙어 있어 `Assets/Editor/` 폴더에 있으면(빌드에서 자동 제외) 에디터 메뉴에 즉시 노출됩니다.
 
 ## 확장 아이디어
 
-- `NavMeshAgent`를 이용한 적 AI 추적 로직
-- `Cinemachine` 패키지로 카메라 전환을 더 매끄럽게 (충돌 회피 포함)
 - `Rigidbody.AddForce` 대신 `CharacterController`로 전환해 계단/경사 처리 개선
-- 라운드마다 최고 점수를 `PlayerPrefs`에 저장하는 하이스코어 기능 추가
+- `CinemachineDeoccluder`(구 Collider extension)로 장애물에 카메라가 가려질 때 자동 회피
+- 코인마다 서로 다른 음높이의 픽업 사운드를 재생해 콤보처럼 들리게 하기 (`ProceduralAudio`에 주파수 파라미터 추가)
+- 여러 마리의 `EnemyChaser`를 배치하고 순찰(EnemyPatrol)과 추적을 상태 전환(플레이어 발견 전/후)으로 조합
+- 최고 기록뿐 아니라 최고 점수(`RollCollect_BestScore`)도 별도로 `PlayerPrefs`에 저장해 시간초과로 끝난 라운드의 기록도 남기기
