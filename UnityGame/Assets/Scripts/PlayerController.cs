@@ -20,8 +20,19 @@ public class PlayerController : MonoBehaviour
 
     [Header("Facing")]
     [SerializeField] private float turnSpeed = 720f;
+    [Tooltip("Extra yaw (degrees) applied on top of the movement-facing rotation. " +
+        "Imported character models don't always face +Z by default — if the " +
+        "character appears to walk sideways or backwards, adjust this until it faces forward.")]
+    [SerializeField] private float modelForwardOffset = 0f;
+
+    [Header("Animation (optional)")]
+    [Tooltip("If the character model has an Animator with a float parameter " +
+        "(e.g. \"Speed\") driving an Idle/Walk/Run blend, set its name here. " +
+        "Leave empty if there's no Animator (e.g. the default primitive mascot).")]
+    [SerializeField] private string speedParameterName = "Speed";
 
     private Rigidbody _rb;
+    private Animator _animator;
     private Vector3 _moveInput;
     private bool _isGrounded;
 
@@ -33,6 +44,25 @@ public class PlayerController : MonoBehaviour
     {
         _rb = GetComponent<Rigidbody>();
         _rb.interpolation = RigidbodyInterpolation.Interpolate;
+
+        _animator = GetComponentInChildren<Animator>();
+        if (_animator != null && !HasFloatParameter(_animator, speedParameterName))
+        {
+            // Avoid spamming "parameter does not exist" warnings every frame
+            // when an imported character's Animator uses different names.
+            _animator = null;
+        }
+    }
+
+    private static bool HasFloatParameter(Animator animator, string paramName)
+    {
+        if (string.IsNullOrEmpty(paramName)) return false;
+
+        foreach (AnimatorControllerParameter param in animator.parameters)
+        {
+            if (param.type == AnimatorControllerParameterType.Float && param.name == paramName) return true;
+        }
+        return false;
     }
 
     private void Update()
@@ -81,8 +111,14 @@ public class PlayerController : MonoBehaviour
         Vector3 facingDirection = _dashTimeRemaining > 0f ? _dashDirection : _moveInput;
         if (facingDirection.sqrMagnitude > 0.01f)
         {
-            Quaternion targetRotation = Quaternion.LookRotation(facingDirection, Vector3.up);
+            Quaternion targetRotation = Quaternion.LookRotation(facingDirection, Vector3.up) * Quaternion.Euler(0f, modelForwardOffset, 0f);
             _rb.MoveRotation(Quaternion.RotateTowards(_rb.rotation, targetRotation, turnSpeed * Time.fixedDeltaTime));
+        }
+
+        if (_animator != null && !string.IsNullOrEmpty(speedParameterName))
+        {
+            float speed = new Vector2(velocity.x, velocity.z).magnitude;
+            _animator.SetFloat(speedParameterName, speed);
         }
     }
 }

@@ -35,7 +35,7 @@ public static class SceneBuilder
         GameObject restartButtonObj;
         BuildUI(out scoreText, out timerText, out bestTimeText, out comboText, out messageText, out restartButtonObj);
 
-        BuildGameManager(scoreText, timerText, bestTimeText, comboText, messageText, restartButtonObj);
+        BuildGameManager(scoreText, timerText, bestTimeText, comboText, messageText, restartButtonObj, player.transform.position);
 
         SaveSceneAndRegister(scene);
 
@@ -54,11 +54,39 @@ public static class SceneBuilder
         return floor;
     }
 
+    // If a rigged character prefab has been placed at
+    // Assets/Resources/PlayerCharacter.prefab (e.g. an imported Asset
+    // Store / Mixamo model), use it as the player instead of the
+    // built-in primitive mascot. See README.md for import instructions.
+    private const string ImportedCharacterResourceName = "PlayerCharacter";
+
     private static GameObject BuildPlayer()
     {
-        // A Capsule + Sphere head + eyes reads as a simple mascot character
-        // instead of a plain ball; PlayerController turns it to face its
-        // move direction, so the face isn't stuck pointing one way.
+        GameObject importedCharacter = Resources.Load<GameObject>(ImportedCharacterResourceName);
+        GameObject player = importedCharacter != null
+            ? BuildPlayerFromImportedCharacter(importedCharacter)
+            : BuildPlayerPrimitive();
+
+        Rigidbody rb = player.GetComponent<Rigidbody>();
+        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationY | RigidbodyConstraints.FreezeRotationZ;
+
+        PlayerController controller = player.AddComponent<PlayerController>();
+
+        // The default primitive is a Capsule (half-height 1); most
+        // imported humanoid rigs are similarly tall with a feet pivot, so
+        // the same distance works for both. Adjust manually afterward if
+        // your specific model is noticeably shorter/taller.
+        SerializedObject controllerSO = new SerializedObject(controller);
+        controllerSO.FindProperty("groundCheckDistance").floatValue = 1.1f;
+        controllerSO.ApplyModifiedProperties();
+
+        return player;
+    }
+
+    // A Capsule + Sphere head + eyes reads as a simple mascot character
+    // instead of a plain ball — the zero-asset default.
+    private static GameObject BuildPlayerPrimitive()
+    {
         GameObject player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         player.name = "Player";
         player.transform.position = new Vector3(0f, 1f, 0f);
@@ -67,16 +95,34 @@ public static class SceneBuilder
 
         BuildPlayerFace(player.transform);
 
-        Rigidbody rb = player.AddComponent<Rigidbody>();
-        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationY | RigidbodyConstraints.FreezeRotationZ;
+        player.AddComponent<Rigidbody>();
+        return player;
+    }
 
-        PlayerController controller = player.AddComponent<PlayerController>();
+    // Imported rigged characters almost always have their pivot at their
+    // feet (not centered like our primitive capsule), so they're placed
+    // at floor level (y = 0) instead of y = 1. Any gameplay components
+    // the prefab doesn't already have are added here, so any humanoid
+    // model works without editing this method.
+    private static GameObject BuildPlayerFromImportedCharacter(GameObject prefab)
+    {
+        GameObject player = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+        player.name = "Player";
+        player.transform.position = Vector3.zero;
+        player.tag = "Player";
 
-        // The Capsule's half-height (1) is taller than the Sphere's radius
-        // (0.5) the ground-check distance was originally tuned for.
-        SerializedObject controllerSO = new SerializedObject(controller);
-        controllerSO.FindProperty("groundCheckDistance").floatValue = 1.1f;
-        controllerSO.ApplyModifiedProperties();
+        if (player.GetComponent<Rigidbody>() == null)
+        {
+            player.AddComponent<Rigidbody>();
+        }
+
+        if (player.GetComponent<Collider>() == null)
+        {
+            CapsuleCollider capsule = player.AddComponent<CapsuleCollider>();
+            capsule.center = new Vector3(0f, 1f, 0f);
+            capsule.height = 2f;
+            capsule.radius = 0.4f;
+        }
 
         return player;
     }
@@ -232,7 +278,7 @@ public static class SceneBuilder
         return buttonObj;
     }
 
-    private static void BuildGameManager(Text scoreText, Text timerText, Text bestTimeText, Text comboText, Text messageText, GameObject restartButtonObj)
+    private static void BuildGameManager(Text scoreText, Text timerText, Text bestTimeText, Text comboText, Text messageText, GameObject restartButtonObj, Vector3 playerSpawnPoint)
     {
         GameObject gmObj = new GameObject("GameManager");
         GameManager gameManager = gmObj.AddComponent<GameManager>();
@@ -244,7 +290,7 @@ public static class SceneBuilder
         gmSO.FindProperty("comboText").objectReferenceValue = comboText;
         gmSO.FindProperty("messageText").objectReferenceValue = messageText;
         gmSO.FindProperty("restartButton").objectReferenceValue = restartButtonObj;
-        gmSO.FindProperty("playerSpawnPoint").vector3Value = new Vector3(0f, 1f, 0f);
+        gmSO.FindProperty("playerSpawnPoint").vector3Value = playerSpawnPoint;
         gmSO.FindProperty("useTimeLimit").boolValue = true;
         gmSO.FindProperty("timeLimitSeconds").floatValue = 60f;
         gmSO.ApplyModifiedProperties();

@@ -57,7 +57,7 @@ UnityGame/
 3. 다음이 자동으로 수행됩니다:
    - `Assets/Scenes/MainScene.unity` 새 씬 생성 (기존 열린 씬에 저장하지 않은 변경사항이 있으면 저장 여부를 묻는 대화상자가 뜰 수 있음)
    - `Player` 태그가 없으면 TagManager에 자동 등록
-   - Floor(Plane) 생성 후 `NavMeshSurface`로 즉시 NavMesh를 굽고, Player(Capsule + 구 머리 + 눈 2개로 이루어진 마스코트 캐릭터, Rigidbody + PlayerController) 생성
+   - Floor(Plane) 생성 후 `NavMeshSurface`로 즉시 NavMesh를 굽고, Player 생성 — `Assets/Resources/PlayerCharacter.prefab`이 있으면 그 캐릭터를 사용하고, 없으면 기본 마스코트(Capsule + 구 머리 + 눈 2개)를 사용 (아래 "실제 캐릭터 임포트하기" 참고)
    - Main Camera에 `CinemachineBrain` 부착 + `CM FollowCamera`(`CinemachineCamera` + `CinemachineFollow` + `CinemachineRotationComposer`, target = Player) 생성
    - 빈 `StageManager` 오브젝트 생성 — 코인/적은 씬에 미리 배치하지 않고, Play를 눌러야 `StageManager.Start()`가 스테이지 1의 코인·적을 랜덤 위치에 실제로 생성함
    - Canvas + EventSystem, `ScoreText`/`TimerText`/`BestTimeText`/`ComboText`/`MessageText`/`RestartButton`(초기 비활성화) UI 생성
@@ -66,6 +66,40 @@ UnityGame/
 4. 콘솔에 `Roll & Collect scene built and saved to Assets/Scenes/MainScene.unity. Press Play to test.` 로그가 뜨면 완료. 바로 상단 ▶ Play 버튼을 눌러 플레이합니다.
 
 다시 실행하면 새 씬을 또 만들어 저장하므로, 자동 생성 결과를 손으로 수정한 뒤에는 재실행하지 않도록 주의하세요.
+
+## 실제 리깅 캐릭터로 교체하기 (선택)
+
+기본 마스코트(Capsule + 머리) 대신 진짜 사람 모양의 리깅된 캐릭터를 쓰고 싶다면, Asset Store에서 무료 캐릭터를 받아 아래 규칙대로 배치하면 `SceneBuilder`가 자동으로 그걸 사용합니다.
+
+### 1. 캐릭터 찾기 (검색해볼 만한 후보)
+
+Asset Store(assetstore.unity.com)에서 가격 필터를 **Free**로 두고 아래 같은 걸 검색해보세요:
+
+- **"Unity-Chan!"** — Unity 공식 무료 마스코트 캐릭터, 애니메이션(대기/걷기/달리기) 포함, 정식 Humanoid 리그
+- **"RPG Tiny Hero Duo"** (PolyPixel) — 단순한 스타일의 무료 리깅 캐릭터, 초보자가 다루기 쉬움
+- 검색창에 그냥 **"free character rigged"** 로 검색해서 나오는 것 중, 미리보기에 **"Humanoid"** 리그와 애니메이션이 포함된다고 적힌 걸 고르면 무난합니다.
+
+Asset Store 목록은 계속 바뀌기 때문에 정확히 이 이름들이 지금도 있다는 보장은 없어요 — 검색해서 나오는 무료 항목 중 하나를 고르시면 됩니다. Mixamo(mixamo.com, Adobe 계정 무료 가입)에서 캐릭터 + 애니메이션을 받아도 동일하게 사용 가능합니다.
+
+### 2. 임포트
+
+1. 웹 브라우저에서 원하는 에셋 페이지 → **"Add to My Assets"** (무료 항목은 바로 추가됨)
+2. Unity 에디터로 돌아와서 `Window > Package Manager` → 왼쪽 위 드롭다운을 **"My Assets"**로 전환
+3. 방금 추가한 에셋 선택 → **Download** → **Import** → 임포트 창에서 **Import** 버튼 클릭 (전체 선택된 채로 두면 됨)
+4. Project 창에서 임포트된 폴더 안의 **캐릭터 프리팹**(보통 `Prefabs` 폴더 안에 있고, 파란색 정육면체 아이콘)을 찾습니다.
+
+### 3. `PlayerCharacter`로 등록
+
+1. Project 창에서 `Assets` 폴더 아래에 **`Resources`** 라는 이름의 폴더가 없다면 새로 만듭니다 (우클릭 → `Create > Folder`, 이름을 정확히 `Resources`로).
+2. 찾은 캐릭터 프리팹을 **복사해서** `Assets/Resources/` 안에 넣고, 이름을 정확히 **`PlayerCharacter`**로 바꿉니다 (원본 프리팹은 그대로 두고 복사본을 씁니다 — 이름이 겹치면 안 됩니다).
+3. 상단 메뉴 **`Tools > Roll & Collect > Build Scene`**을 다시 실행합니다. 콘솔 로그가 뜨면 `Assets/Resources/PlayerCharacter.prefab`을 자동으로 찾아서 그 캐릭터로 플레이어를 만듭니다 (없으면 예전처럼 기본 마스코트를 씁니다).
+
+### 4. 흔히 조정이 필요한 부분
+
+- **캐릭터가 옆으로/거꾸로 걷는 것처럼 보임**: 임포트마다 모델이 기본으로 바라보는 방향(+Z가 아닐 수 있음)이 달라서 그렇습니다. `Player` 오브젝트의 `Player Controller` 컴포넌트에서 **`Model Forward Offset`** 값을 90, 180, -90 등으로 바꿔가며 캐릭터가 이동 방향을 제대로 보는 각도를 찾으세요.
+- **캐릭터가 바닥에 파묻히거나 떠 있음**: 대부분의 리깅 캐릭터는 발 위치가 피벗(원점)이라 `y = 0`에 놓이도록 만들어뒀는데, 특정 에셋은 다를 수 있습니다. `Player` 오브젝트를 선택해 Scene 뷰에서 Y 위치를 손으로 조정해보고, 맞는 값을 찾으면 `GameManager`의 `Player Spawn Point` Y 값도 똑같이 맞춰주세요.
+- **걷는 애니메이션이 재생되지 않음**: 캐릭터에 `Animator`와 애니메이션은 있지만, `Player Controller`의 **`Speed Parameter Name`**(기본값 `"Speed"`)이 그 캐릭터의 Animator Controller에 있는 실제 파라미터 이름과 다르면 무시됩니다. 캐릭터를 선택해 Inspector에서 `Animator` 컴포넌트의 Controller를 더블클릭해 Animator 창을 열고, `Parameters` 탭에서 이동 속도를 나타내는 float 파라미터 이름을 확인해 `Speed Parameter Name`에 그대로 입력하세요. 파라미터가 없거나 애니메이션 자체가 이동 속도와 연결되어 있지 않다면(예: 애니메이션 전환이 다른 방식으로 되어 있음), 이 부분은 해당 에셋 구조를 보면서 추가로 손봐야 할 수 있습니다 — 어떤 에셋을 받으셨는지, Animator Controller 구조가 어떻게 생겼는지 알려주시면 이어서 도와드릴게요.
+- 콜라이더 크기가 안 맞아서 코인을 못 먹거나 적과 이상하게 충돌한다면, `Player`의 `Capsule Collider` 컴포넌트에서 `Radius`/`Height`/`Center`를 캐릭터 실제 크기에 맞게 조정하세요.
 
 ## 수동 씬 구성 단계 (참고용 / 패키지 없이 단순 버전을 원할 때)
 
@@ -121,7 +155,8 @@ UnityGame/
 - **PlayerController**: `Input.GetAxisRaw`로 수평/수직 입력을 받아 `Rigidbody.velocity`의 X/Z 성분만 직접 갱신 (물리 엔진의 관성/충돌 반응은 유지하면서 즉각적인 반응성을 확보). `Physics.Raycast`로 접지 여부를 판정해 이중 점프를 방지.
 - **캐릭터 방향 전환**: `FixedUpdate()`에서 현재 이동 방향(대시 중이면 대시 방향)을 바라보도록 `Quaternion.LookRotation` + `Quaternion.RotateTowards`로 목표 회전을 계산하고, `Rigidbody.MoveRotation()`으로 적용합니다. `Rigidbody`에 `MoveRotation`을 쓰는 이유는, 물리 엔진이 충돌 등으로 임의로 돌리는 것(예전엔 X/Z만 고정했음)과 구분해서 "게임 로직이 의도한 회전"만 매끄럽게(초당 `turnSpeed`, 기본 720도) 적용하기 위함입니다. Rigidbody의 회전 축을 X/Y/Z 모두 고정해뒀기 때문에 물리 충돌로 캐릭터가 옆으로 넘어지거나 제멋대로 도는 일 없이, 오직 이 스크립트가 원하는 방향으로만 부드럽게 돌아갑니다.
 - **대시**: `Update()`에서 Shift 입력과 쿨다운을 체크해 `_dashDirection`/`_dashTimeRemaining`을 세팅하고, `FixedUpdate()`에서 `_dashTimeRemaining > 0`인 동안은 평소 이동 속도 대신 `dashSpeed`(기본 20)로 X/Z 속도를 덮어씁니다. 이동 입력이 없을 때는 대시가 발동하지 않도록 `_moveInput.sqrMagnitude > 0.01f`로 가드하며, 쿨다운(기본 1초)이 끝나기 전에는 재발동을 막습니다.
-- **캐릭터/코인 모양**: 외부 3D 모델 에셋 없이 기본 프리미티브만으로 조합했습니다. 플레이어는 `Capsule`(몸통) + 자식 `Sphere`(머리, 콜라이더 제거해 순수 시각용) + 눈 역할의 작은 검은 `Sphere` 2개로 구성된 마스코트 캐릭터입니다 (`SceneBuilder.BuildPlayerFace()`). 코인은 `Cube` 대신 아주 얇게 스케일한(`(0.6, 0.08, 0.6)`) `Cylinder`를 써서 동전 모양 디스크로 보이게 했고, `CollectibleItem`이 이미 월드 Y축 기준으로 회전시키고 있어서 코드 변경 없이 "동전이 제자리에서 빙글빙글 도는" 느낌이 그대로 납니다 (`GameObjectFactory.CreateCoin`).
+- **캐릭터/코인 모양**: 외부 3D 모델 에셋이 없을 때의 기본값은 프리미티브 조합입니다. 플레이어는 `Capsule`(몸통) + 자식 `Sphere`(머리, 콜라이더 제거해 순수 시각용) + 눈 역할의 작은 검은 `Sphere` 2개로 구성된 마스코트 캐릭터입니다 (`SceneBuilder.BuildPlayerPrimitive()`/`BuildPlayerFace()`). 코인은 `Cube` 대신 아주 얇게 스케일한(`(0.6, 0.08, 0.6)`) `Cylinder`를 써서 동전 모양 디스크로 보이게 했고, `CollectibleItem`이 이미 월드 Y축 기준으로 회전시키고 있어서 코드 변경 없이 "동전이 제자리에서 빙글빙글 도는" 느낌이 그대로 납니다 (`GameObjectFactory.CreateCoin`).
+- **실제 캐릭터 임포트 지원**: `SceneBuilder.BuildPlayer()`는 매번 `Resources.Load<GameObject>("PlayerCharacter")`로 `Assets/Resources/PlayerCharacter.prefab`이 있는지 먼저 확인합니다. 있으면 `PrefabUtility.InstantiatePrefab()`으로 그 프리팹을 인스턴스화하고(`BuildPlayerFromImportedCharacter()`), `Rigidbody`/`Collider`가 없으면 자동으로 추가해줍니다 — 어떤 캐릭터를 가져오든 이 스크립트를 수정할 필요가 없도록 설계했습니다. 없으면 기존 기본 마스코트를 만듭니다. 두 경로 모두 이후 `PlayerController`를 붙이고 `groundCheckDistance`를 캡슐/휴머노이드 리그에 맞는 값(1.1)으로 설정하는 공통 로직을 거칩니다. `PlayerController`에는 이 시나리오를 위한 필드도 추가되어 있습니다: `modelForwardOffset`(모델이 +Z를 안 보고 있을 때 보정하는 추가 회전각)과 `speedParameterName`(Animator의 이동 속도 float 파라미터 이름 — `Awake()`에서 실제로 그 이름의 파라미터가 있는지 확인해서, 없으면 매 프레임 경고가 뜨지 않도록 아예 애니메이터 참조를 꺼둡니다).
 - **CameraFollow** (수동 버전에서만 사용): `Vector3.SmoothDamp`로 목표 오프셋 위치를 향해 매끄럽게 추적하고, `LookAt`으로 항상 플레이어를 주시.
 - **Cinemachine 카메라 (자동 빌드 기본값)**: 실제 `Camera`에는 `CinemachineBrain`만 부착해 "어떤 가상 카메라가 지금 화면을 제어할지" 결정하는 역할을 맡기고, 별도의 `CM FollowCamera` 오브젝트에 실제 추적 로직을 둡니다. `CinemachineCamera.Follow`/`LookAt`으로 대상을 지정하고, Position Control 역할의 `CinemachineFollow`(오프셋 `(0, 6, -8)` 유지)와 Rotation Control 역할의 `CinemachineRotationComposer`(화면 구도 안에 대상을 계속 붙잡아둠)를 조합합니다. 이 둘의 역할 분리(Follow=위치, RotationComposer=조준)가 Cinemachine 3.x의 표준 카메라 파이프라인 구성 방식입니다.
 - **CollectibleItem**: `OnTriggerEnter`에서 태그가 `Player`인 콜라이더만 필터링해 `GameManager.AddScore()`를 호출하고, 반환된 콤보 수치로 `ProceduralAudio`/`ProceduralEffects`를 재생한 뒤 자기 자신을 파괴. `Time.deltaTime` 기반 회전으로 시각적 피드백 제공.
