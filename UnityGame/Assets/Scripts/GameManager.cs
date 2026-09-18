@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -9,6 +10,10 @@ public class GameManager : MonoBehaviour
     public static GameManager Instance { get; private set; }
 
     public bool IsGameOver => _isGameOver;
+
+    // Fired instead of showing the win screen when a StageManager is
+    // present, so it can swap in the next stage's coins/enemies.
+    public event Action OnStageCollected;
 
     private const string BestTimeKey = "RollCollect_BestTime";
 
@@ -41,6 +46,9 @@ public class GameManager : MonoBehaviour
     private int _combo;
     private float _comboTimer;
     private float _comboTextTimer;
+
+    private bool _multiStageMode;
+    private float _tempMessageTimer;
 
     private void Awake()
     {
@@ -77,6 +85,12 @@ public class GameManager : MonoBehaviour
         {
             _comboTextTimer -= Time.deltaTime;
             if (_comboTextTimer <= 0f && comboText != null) comboText.text = string.Empty;
+        }
+
+        if (_tempMessageTimer > 0f)
+        {
+            _tempMessageTimer -= Time.deltaTime;
+            if (_tempMessageTimer <= 0f && messageText != null) messageText.text = string.Empty;
         }
 
         if (!useTimeLimit) return;
@@ -119,10 +133,33 @@ public class GameManager : MonoBehaviour
 
         if (_score >= _totalCollectibles)
         {
-            ShowWinMessage();
+            if (_multiStageMode) OnStageCollected?.Invoke();
+            else ShowWinMessage();
         }
 
         return _combo;
+    }
+
+    public void EnableMultiStageMode() => _multiStageMode = true;
+
+    // Called by StageManager after it builds each stage's coins, so the
+    // win/score check above operates on that stage's total instead of a
+    // fixed scene-wide count.
+    public void SetStageCollectibleCount(int count)
+    {
+        _totalCollectibles = count;
+        _score = 0;
+        UpdateScoreUI();
+    }
+
+    // Briefly shows text in the message area (e.g. a "Stage 2!" banner)
+    // without ending the game; it self-clears after `duration` seconds
+    // unless the game ends first, in which case the win/loss message
+    // set afterward takes over instead.
+    public void ShowTemporaryMessage(string text, float duration)
+    {
+        if (messageText != null) messageText.text = text;
+        _tempMessageTimer = duration;
     }
 
     public void RespawnPlayer(GameObject player)
@@ -132,6 +169,19 @@ public class GameManager : MonoBehaviour
         Rigidbody rb = player.GetComponent<Rigidbody>();
         if (rb != null) rb.linearVelocity = Vector3.zero;
         player.transform.position = playerSpawnPoint;
+    }
+
+    public void LoseGame()
+    {
+        if (_isGameOver) return;
+
+        _isGameOver = true;
+        if (messageText != null)
+        {
+            messageText.text = "Game Over! An enemy caught you.";
+        }
+        if (restartButton != null) restartButton.SetActive(true);
+        Time.timeScale = 0f;
     }
 
     private void UpdateScoreUI()
@@ -166,7 +216,7 @@ public class GameManager : MonoBehaviour
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
-    private void ShowWinMessage()
+    public void ShowWinMessage()
     {
         _isGameOver = true;
 

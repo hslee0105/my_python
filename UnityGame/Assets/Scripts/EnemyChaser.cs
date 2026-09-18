@@ -36,7 +36,7 @@ public class EnemyChaser : MonoBehaviour
     {
         if (collision.gameObject.CompareTag("Player") && GameManager.Instance != null)
         {
-            GameManager.Instance.RespawnPlayer(collision.gameObject);
+            GameManager.Instance.LoseGame();
         }
     }
 }

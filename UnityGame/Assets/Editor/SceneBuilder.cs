@@ -5,27 +5,19 @@ using UnityEditor;
 using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.AI;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 // Editor-only automation: assembles the full "Roll & Collect" scene
-// (floor, player, camera, collectibles, enemy, UI, GameManager) and
-// wires every reference, so the manual steps in README.md can be
-// skipped. Run via Tools > Roll & Collect > Build Scene.
+// (floor, player, camera, stage manager, UI, GameManager) and wires
+// every reference, so the manual steps in README.md can be skipped.
+// Coins/enemies are no longer placed here — StageManager builds each
+// stage's randomized layout at runtime instead. Run via
+// Tools > Roll & Collect > Build Scene.
 public static class SceneBuilder
 {
     private const string ScenePath = "Assets/Scenes/MainScene.unity";
-    private static readonly Vector3[] CoinPositions =
-    {
-        new Vector3(3f, 0.5f, 3f),
-        new Vector3(-3f, 0.5f, 3f),
-        new Vector3(3f, 0.5f, -3f),
-        new Vector3(-3f, 0.5f, -3f),
-        new Vector3(0f, 0.5f, 5f),
-        new Vector3(0f, 0.5f, -5f),
-    };
 
     [MenuItem("Tools/Roll & Collect/Build Scene")]
     public static void BuildScene()
@@ -37,8 +29,7 @@ public static class SceneBuilder
         BuildFloor();
         GameObject player = BuildPlayer();
         BuildCinemachineCamera(player.transform);
-        BuildCollectibles();
-        BuildEnemies();
+        BuildStageManager();
 
         Text scoreText, timerText, bestTimeText, comboText, messageText;
         GameObject restartButtonObj;
@@ -100,79 +91,12 @@ public static class SceneBuilder
         vcamObj.AddComponent<CinemachineRotationComposer>();
     }
 
-    private static void BuildCollectibles()
+    // StageManager owns all coin/enemy placement (randomized per stage)
+    // at runtime; SceneBuilder only needs to drop the component in.
+    private static void BuildStageManager()
     {
-        GameObject parent = new GameObject("Collectibles");
-
-        foreach (Vector3 pos in CoinPositions)
-        {
-            GameObject coin = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            coin.name = "Coin";
-            coin.transform.SetParent(parent.transform);
-            coin.transform.position = pos;
-            coin.transform.localScale = Vector3.one * 0.4f;
-
-            Collider coinCollider = coin.GetComponent<Collider>();
-            coinCollider.isTrigger = true;
-            coin.AddComponent<CollectibleItem>();
-
-            SetInstanceColor(coin, Color.yellow);
-        }
-    }
-
-    private static readonly Vector3[] EnemySpawnPoints =
-    {
-        new Vector3(5f, 0f, 5f),
-        new Vector3(-5f, 0f, -5f),
-        new Vector3(5f, 0f, -5f),
-        new Vector3(-5f, 0f, 5f),
-    };
-    private const float EnemyBaseSpeed = 3.5f;
-    private const float EnemySpawnInterval = 30f;
-
-    // Places one enemy immediately, then adds an EnemySpawner that spawns
-    // another every EnemySpawnInterval seconds (ramping difficulty up over
-    // a long round instead of starting with every enemy already active).
-    private static void BuildEnemies()
-    {
-        BuildEnemy(EnemySpawnPoints[0], EnemyBaseSpeed);
-
-        GameObject spawnerObj = new GameObject("EnemySpawner");
-        EnemySpawner spawner = spawnerObj.AddComponent<EnemySpawner>();
-
-        SerializedObject spawnerSO = new SerializedObject(spawner);
-        SerializedProperty spawnPointsProp = spawnerSO.FindProperty("spawnPoints");
-        spawnPointsProp.arraySize = EnemySpawnPoints.Length;
-        for (int i = 0; i < EnemySpawnPoints.Length; i++)
-        {
-            spawnPointsProp.GetArrayElementAtIndex(i).vector3Value = EnemySpawnPoints[i];
-        }
-        spawnerSO.FindProperty("spawnInterval").floatValue = EnemySpawnInterval;
-        spawnerSO.FindProperty("baseSpeed").floatValue = EnemyBaseSpeed;
-        spawnerSO.FindProperty("wavesSpawned").intValue = 1;
-        spawnerSO.ApplyModifiedProperties();
-    }
-
-    private static void BuildEnemy(Vector3 position, float speed)
-    {
-        GameObject enemy = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        enemy.name = "Enemy";
-        enemy.transform.position = position;
-        SetInstanceColor(enemy, Color.red);
-
-        NavMeshAgent agent = enemy.AddComponent<NavMeshAgent>();
-        agent.baseOffset = 0.5f;
-        agent.speed = speed;
-        agent.radius = 0.4f;
-
-        enemy.AddComponent<EnemyChaser>();
-    }
-
-    private static void SetInstanceColor(GameObject go, Color color)
-    {
-        Renderer renderer = go.GetComponent<Renderer>();
-        Material instanceMaterial = new Material(renderer.sharedMaterial) { color = color };
-        renderer.sharedMaterial = instanceMaterial;
+        GameObject stageManagerObj = new GameObject("StageManager");
+        stageManagerObj.AddComponent<StageManager>();
     }
 
     private static void BuildUI(out Text scoreText, out Text timerText, out Text bestTimeText, out Text comboText, out Text messageText, out GameObject restartButtonObj)

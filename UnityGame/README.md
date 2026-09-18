@@ -1,6 +1,6 @@
 # Unity 3D 게임 예제 — "Roll & Collect"
 
-Rigidbody 기반 물리 이동(대시 포함), Cinemachine 3인칭 추적 카메라, 회전하는 수집 아이템(콤보 시스템 + 픽업 사운드·파티클 포함), NavMeshAgent로 플레이어를 추적하는 장애물 여러 마리, 점수/승리 UI, 제한시간 모드, PlayerPrefs 기반 최고 기록, 그리고 재시작 버튼을 갖춘 3D 게임 예제입니다.
+Rigidbody 기반 물리 이동(대시 포함), Cinemachine 3인칭 추적 카메라, 회전하는 수집 아이템(콤보 시스템 + 픽업 사운드·파티클 포함), NavMeshAgent로 플레이어를 추적하는 장애물(닿으면 즉시 게임오버), 코인/적 배치와 개수가 랜덤으로 달라지는 3단계 스테이지 진행, 제한시간 모드, PlayerPrefs 기반 최고 기록, 그리고 재시작 버튼을 갖춘 3D 게임 예제입니다.
 
 ## 개발 환경
 
@@ -34,13 +34,15 @@ UnityGame/
 │   │   ├── CameraFollow.cs       # (더 이상 자동 빌드에선 안 씀) 패키지 없는 SmoothDamp 추적 카메라 대안
 │   │   ├── CollectibleItem.cs    # 회전하는 수집 아이템, 트리거 충돌 시 점수+사운드+파티클
 │   │   ├── EnemyPatrol.cs        # (더 이상 자동 빌드에선 안 씀) 패키지 없는 좌우 왕복 장애물 대안
-│   │   ├── EnemyChaser.cs        # NavMeshAgent로 플레이어를 실시간 추적하는 장애물
-│   │   ├── EnemySpawner.cs       # 30초마다 적을 한 마리씩 추가 스폰해 난이도를 올리는 런타임 스포너
+│   │   ├── EnemyChaser.cs        # NavMeshAgent로 플레이어를 실시간 추적, 충돌 시 즉시 게임오버
+│   │   ├── EnemySpawner.cs       # 스테이지 진행 중 일정 시간마다 적을 한 마리씩 추가 스폰
+│   │   ├── GameObjectFactory.cs  # 코인/적 오브젝트를 만드는 공용 헬퍼 (SceneBuilder/StageManager/EnemySpawner가 공유)
+│   │   ├── StageManager.cs       # 스테이지별로 코인/적을 랜덤 배치하고, 클리어 시 다음 스테이지로 전환
 │   │   ├── ProceduralAudio.cs    # 외부 오디오 파일 없이 코드로 코인 획득 효과음 생성
 │   │   ├── ProceduralEffects.cs  # 내장 ParticleSystem으로 코인 획득 파티클 생성
-│   │   └── GameManager.cs        # 점수/승리 조건/제한시간/최고기록(PlayerPrefs)/재시작/UI 갱신을 담당하는 싱글턴
+│   │   └── GameManager.cs        # 점수/스테이지 진행/제한시간/최고기록(PlayerPrefs)/게임오버/재시작/UI 갱신을 담당하는 싱글턴
 │   ├── Editor/
-│   │   └── SceneBuilder.cs       # 씬 전체를 자동으로 조립하는 에디터 확장 (Tools 메뉴)
+│   │   └── SceneBuilder.cs       # 씬 뼈대(바닥/플레이어/카메라/UI/GameManager/StageManager)를 자동으로 조립하는 에디터 확장 (Tools 메뉴)
 │   ├── Materials/                # (선택) 색상 구분용 머티리얼
 │   └── Scenes/                   # 자동/수동으로 생성된 씬이 저장되는 위치
 └── .gitignore                    # Unity가 자동 생성하는 Library/Temp 등 제외
@@ -57,8 +59,7 @@ UnityGame/
    - `Player` 태그가 없으면 TagManager에 자동 등록
    - Floor(Plane) 생성 후 `NavMeshSurface`로 즉시 NavMesh를 굽고, Player(Sphere + Rigidbody + PlayerController) 생성
    - Main Camera에 `CinemachineBrain` 부착 + `CM FollowCamera`(`CinemachineCamera` + `CinemachineFollow` + `CinemachineRotationComposer`, target = Player) 생성
-   - Coin 6개(Trigger + CollectibleItem, 노란색 — 획득 시 콤보 판정 + 절차적 효과음(콤보에 따라 피치 상승) + 파티클 재생) 생성
-   - Enemy 1마리(Cube + NavMeshAgent + EnemyChaser, 빨간색, 플레이어를 실시간 추적)를 즉시 배치하고, `EnemySpawner`가 30초마다 새 지점에 적을 한 마리씩 추가 스폰(속도도 점점 빨라짐)하도록 구성
+   - 빈 `StageManager` 오브젝트 생성 — 코인/적은 씬에 미리 배치하지 않고, Play를 눌러야 `StageManager.Start()`가 스테이지 1의 코인·적을 랜덤 위치에 실제로 생성함
    - Canvas + EventSystem, `ScoreText`/`TimerText`/`BestTimeText`/`ComboText`/`MessageText`/`RestartButton`(초기 비활성화) UI 생성
    - `GameManager` 오브젝트 생성 후 위 UI/설정 값을 `SerializedObject`로 전부 연결 (제한시간 60초, `RestartButton.OnClick → GameManager.RestartGame()` 포함)
    - 씬을 저장하고 `File > Build Settings`의 씬 목록에 자동 등록
@@ -68,7 +69,7 @@ UnityGame/
 
 ## 수동 씬 구성 단계 (참고용 / 패키지 없이 단순 버전을 원할 때)
 
-아래 절차는 **Cinemachine과 AI Navigation 패키지를 설치하지 않고도** 만들 수 있는, 조금 더 단순한 원본 버전(고정 오프셋 카메라 `CameraFollow.cs` + 좌우 왕복 장애물 `EnemyPatrol.cs`)을 손으로 재현하는 방법입니다. 지금의 자동 빌드 결과(Cinemachine 카메라, NavMeshAgent 추적 AI)와는 다르니, 두 패키지 설치가 부담스럽다면 이 절차를 참고해 직접 조립하세요.
+아래 절차는 **Cinemachine과 AI Navigation 패키지를 설치하지 않고도** 만들 수 있는, 조금 더 단순한 원본 버전(고정 오프셋 카메라 `CameraFollow.cs` + 좌우 왕복 장애물 `EnemyPatrol.cs`, 부딪혀도 즉시 게임오버가 아니라 리스폰만 되고, 스테이지 진행도 없는 단일 라운드 버전)을 손으로 재현하는 방법입니다. 지금의 자동 빌드 결과(Cinemachine 카메라, NavMeshAgent 추적 AI + 즉사, 3단계 스테이지)와는 다르니, 두 패키지 설치가 부담스럽다면 이 절차를 참고해 직접 조립하세요.
 
 1. **새 프로젝트 생성**: Unity Hub에서 3D (URP or Built-in) 템플릿으로 새 프로젝트를 만들고, 이 저장소의 `UnityGame/Assets` 폴더 내용을 프로젝트의 `Assets` 폴더로 복사(또는 이 폴더를 그대로 Unity 프로젝트 루트로 열기)합니다.
 2. **씬 생성**: `Assets/Scenes` 에 새 씬(`MainScene`)을 만들고 엽니다.
@@ -125,10 +126,12 @@ UnityGame/
 - **콤보 시스템**: `GameManager.AddScore()`가 호출될 때마다 직전 픽업 이후 `comboWindow`(기본 1.5초) 이내였는지 확인해 콤보를 이어가거나(`_combo + 1`) 새로 시작합니다(`_combo = 1`). 콤보 2단계부터는 `comboTimeBonusPerStep × (combo - 1)`만큼 제한시간을 되돌려주고 `ComboText`에 "Combo x3! +1.0s" 형태로 잠깐(기본 1초) 표시합니다. `AddScore`가 현재 콤보 수치를 반환하므로, `CollectibleItem`은 이 값을 그대로 `ProceduralAudio.PlayPickupSound`에 넘겨 피치를 올립니다. 콤보는 점수/승리 판정(`_score >= _totalCollectibles`)과는 완전히 분리되어 있어, 아무리 콤보가 쌓여도 코인을 실제로 다 모아야 승리합니다.
 - **ProceduralAudio**: `AudioClip.Create`로 샘플 배열(사인파 + 상승하는 주파수 + 제곱 감쇠 엔벌로프)을 직접 채워 짧은 "띵" 효과음을 생성합니다. 외부 오디오 에셋이 전혀 없어도 동작하며, 한 번 생성한 클립은 static 필드에 캐싱해 재사용합니다. `PlayPickupSound`는 임시 `AudioSource`를 직접 만들어 콤보 단계에 비례해 `pitch`를 최대 2배까지 올린 뒤 재생하고, 클립 길이(피치 보정 포함)만큼 뒤에 `Destroy`를 예약해 코인이 `Destroy(gameObject)`로 즉시 사라져도 소리가 끊기지 않습니다 (피치를 재생 전에 정해야 해서 `PlayClipAtPoint` 대신 이 방식을 씁니다).
 - **ProceduralEffects**: 내장 `ParticleSystem`을 코드로 구성(짧은 버스트, 구형 방출, `Sprites/Default` 셰이더)해 코인 위치에 파티클을 터뜨립니다. `ParticleSystemStopAction.Destroy`를 설정해 재생이 끝나면 별도 타이머 없이 오브젝트가 자동으로 사라집니다.
-- **EnemyPatrol** (수동 버전에서만 사용): `Mathf.PingPong`으로 왕복 운동을 구현 (별도 상태 머신 없이 시간 함수만으로 좌우 이동 구현).
-- **EnemyChaser (NavMeshAgent)**: `Awake()`에서 `Player` 태그로 플레이어를 찾아두고, `repathInterval`(기본 0.2초)마다 `NavMeshAgent.SetDestination(player.position)`을 호출해 목적지를 갱신합니다. 매 프레임 재계산하지 않고 일정 간격으로만 경로를 다시 잡아 CPU 비용을 줄이는, 실무에서 흔히 쓰는 최적화 패턴입니다. `NavMeshSurface.BuildNavMesh()`로 미리 구워둔 바닥 위를 자율적으로 길찾기하며 이동하고, `OnCollisionEnter`로 플레이어와 부딪히면 리스폰시킵니다.
-- **EnemySpawner (시간에 따른 난이도 상승)**: 씬 시작 시 적 1마리(`wavesSpawned = 1`)로 출발해, `Update()`에서 `spawnInterval`(기본 30초)마다 `spawnPoints` 배열을 순환하며 새 적을 하나씩 생성합니다. `NavMeshAgent`/`EnemyChaser`가 붙은 큐브를 `SceneBuilder.BuildEnemy()`와 동일한 방식으로 런타임에 직접 만드는데, `GameObject.CreatePrimitive`/`AddComponent`는 에디터 전용이 아닌 일반 런타임 API라 빌드된 게임에서도 그대로 동작합니다. 새로 스폰되는 적마다 `speedIncreasePerWave`(기본 0.5)만큼 속도가 빨라지고, `maxEnemies`(기본 6)에 도달하면 더 이상 스폰하지 않으며, `GameManager.IsGameOver`가 `true`가 되면(승리/시간초과) 스폰도 즉시 멈춥니다.
-- **GameManager**: 싱글턴 패턴(`Instance`)으로 전역 접근을 제공하며, 씬 시작 시 `FindObjectsOfType<CollectibleItem>()`으로 전체 아이템 수를 캐싱해 승리 조건(`score >= total`)을 판정. 매 프레임 `_elapsedTime`을 누적해 실제 플레이 시간을 추적합니다(제한시간 모드를 꺼도 계속 기록됨).
+- **EnemyPatrol** (수동 버전에서만 사용): `Mathf.PingPong`으로 왕복 운동을 구현 (별도 상태 머신 없이 시간 함수만으로 좌우 이동 구현). 이 버전은 부딪혀도 `GameManager.RespawnPlayer()`로 리스폰만 시킵니다.
+- **EnemyChaser (NavMeshAgent)**: `Awake()`에서 `Player` 태그로 플레이어를 찾아두고, `repathInterval`(기본 0.2초)마다 `NavMeshAgent.SetDestination(player.position)`을 호출해 목적지를 갱신합니다. 매 프레임 재계산하지 않고 일정 간격으로만 경로를 다시 잡아 CPU 비용을 줄이는, 실무에서 흔히 쓰는 최적화 패턴입니다. `NavMeshSurface.BuildNavMesh()`로 미리 구워둔 바닥 위를 자율적으로 길찾기하며 이동하고, `OnCollisionEnter`로 플레이어와 부딪히면 **`GameManager.LoseGame()`을 호출해 즉시 게임을 종료**합니다 (리스폰 없음 — 리스폰이 필요한 단순 버전은 `EnemyPatrol`을 쓰세요).
+- **GameObjectFactory**: 코인/적 큐브를 만드는 코드(프리미티브 생성, 콜라이더 설정, 색상 지정, `NavMeshAgent`/`EnemyChaser`/`CollectibleItem` 부착)를 한 곳에 모아둔 정적 헬퍼입니다. `SceneBuilder`(에디터), `StageManager`·`EnemySpawner`(런타임) 세 곳에서 똑같은 방식으로 오브젝트를 만들어야 해서, 중복 대신 이 헬퍼를 공유합니다.
+- **StageManager (스테이지 진행)**: 씬에는 코인/적을 전혀 미리 배치하지 않고, `Start()`에서 `GameManager.Instance.EnableMultiStageMode()`로 GameManager를 "스테이지 모드"로 전환한 뒤 스테이지 1을 만듭니다. `stages` 배열(기본 3단계: 6/1마리 → 8/2마리 → 10/3마리)에 정의된 개수만큼 `GameObjectFactory`로 코인·적을 생성하는데, 위치는 `RandomSpawnXZ()`가 지정한 사각 영역(`spawnAreaMin`~`spawnAreaMax`) 안에서 매번 새로 뽑고 플레이어 시작 지점과 너무 가까우면 다시 뽑습니다(최대 20회 시도). 생성한 코인 개수는 `GameManager.SetStageCollectibleCount()`로 알려줘 그 스테이지의 승리 기준으로 삼습니다. `GameManager.OnStageCollected` 이벤트(스테이지 모드에서 `_score >= _totalCollectibles`가 될 때 발생)를 구독해두었다가, 이벤트가 오면 기존 오브젝트를 전부 `Destroy`하고 다음 스테이지를 만들며 `ShowTemporaryMessage()`로 "Stage 2 / 3!" 같은 안내를 잠깐 띄웁니다. 마지막 스테이지까지 클리어하면 다음 스테이지를 만드는 대신 `GameManager.ShowWinMessage()`를 직접 호출해 기존 승리 화면(최고 기록 저장 포함)으로 마무리합니다.
+- **EnemySpawner (스테이지 내 시간 경과 난이도 상승)**: 이제 Inspector가 아니라 `Initialize(...)` 메서드로 설정을 주입받습니다 — `StageManager`가 각 스테이지를 만들 때마다 그 스테이지의 적 스폰 지점·시작 속도·이미 배치된 적 수(`wavesSpawned`)로 새로 `Initialize`해서, 스테이지가 바뀔 때마다 카운트가 올바르게 리셋됩니다. `Update()`에서 `spawnInterval`(기본 30초)마다 적을 하나씩 추가로 만들고, 새로 스폰되는 적마다 속도가 빨라지며, 그 스테이지의 `maxEnemies`(적 수 + 3)에 도달하거나 `GameManager.IsGameOver`가 `true`가 되면 더 이상 스폰하지 않습니다.
+- **GameManager**: 싱글턴 패턴(`Instance`)으로 전역 접근을 제공합니다. 기본은 단일 스테이지 모드(씬에 미리 배치된 `CollectibleItem` 개수로 승리 판정)지만, `StageManager`가 있으면 `EnableMultiStageMode()`로 전환되어 코인을 다 모을 때마다 곧바로 승리 처리하는 대신 `OnStageCollected` 이벤트만 발생시키고 다음 처리는 `StageManager`에 맡깁니다. 매 프레임 `_elapsedTime`을 누적해 전체 플레이 시간(모든 스테이지 통틀어)을 추적합니다(제한시간 모드를 꺼도 계속 기록됨). `LoseGame()`은 `ShowWinMessage()`/`ShowTimeUpMessage()`와 동일한 종료 처리(재시작 버튼 노출, `Time.timeScale = 0f`)를 하되 "Game Over! An enemy caught you." 메시지를 보여주고, 최고 기록은 갱신하지 않습니다(승리한 게 아니므로).
 - **최고 기록 (PlayerPrefs)**: 승리 시 `_elapsedTime`을 `PlayerPrefs`의 `RollCollect_BestTime` 키에 저장된 이전 최고 기록과 비교해, 더 빠르면 갱신하고 "New Best Time!" 메시지를 보여줍니다. `PlayerPrefs`는 macOS에서는 `~/Library/Preferences/`, Windows에서는 레지스트리에 저장되어 에디터를 재시작하거나 씬을 재시작해도 유지됩니다. 화면 상단 중앙의 `BestTimeText`가 기록이 없으면 `Best: --`, 있으면 `Best: 12.3s` 형태로 항상 표시됩니다.
 - **제한시간 모드**: `Update()`에서 `Time.deltaTime`만큼 `_timeRemaining`을 감소시키고 `mm:ss` 형식으로 `TimerText`에 표시. 시간이 0이 되면 아직 승리하지 못한 경우 `Time's Up!` 메시지를 띄우고 `_isGameOver` 플래그로 이후의 `AddScore`/`RespawnPlayer` 호출을 무시합니다. 승리·시간초과 두 종료 조건 모두 `Time.timeScale = 0f`로 물리/애니메이션을 포함한 씬 전체를 정지시켜 별도의 입력 잠금 로직 없이 게임을 종료합니다. `Use Time Limit` 체크박스를 끄면 기존처럼 시간 제한 없이 플레이할 수 있습니다.
 - **재시작 버튼**: 게임 종료(승리 또는 시간초과) 시 `restartButton.SetActive(true)`로 평소 숨겨져 있던 버튼을 노출합니다. Unity의 UI 이벤트 시스템은 `Time.timeScale`과 무관하게 동작하므로, `Time.timeScale = 0f`로 멈춘 상태에서도 버튼 클릭이 정상적으로 처리됩니다. 버튼의 `OnClick()`에 연결된 `GameManager.RestartGame()`은 `Time.timeScale`을 1로 복구한 뒤 `SceneManager.LoadScene()`으로 현재 씬을 다시 불러와 모든 상태(점수, 타이머, 수집 아이템, 플레이어 위치)를 초기화합니다.
@@ -140,5 +143,7 @@ UnityGame/
 - `CinemachineDeoccluder`(구 Collider extension)로 장애물에 카메라가 가려질 때 자동 회피
 - `EnemyChaser`에 순찰↔추적 상태 전환 추가 (플레이어가 일정 거리 안에 들어오기 전까지는 `EnemyPatrol`처럼 왕복하다가, 감지되면 추적 모드로 전환)
 - 파워업 아이템(무적, 속도 증가, 시간 추가) 추가 — `CollectibleItem`을 상속하거나 별도 컴포넌트로 구현
-- 최고 기록뿐 아니라 최고 점수(`RollCollect_BestScore`)도 별도로 `PlayerPrefs`에 저장해 시간초과로 끝난 라운드의 기록도 남기기
+- 최고 기록뿐 아니라 최고 점수(`RollCollect_BestScore`)도 별도로 `PlayerPrefs`에 저장해 시간초과/게임오버로 끝난 라운드의 기록도 남기기
 - 대시에 쿨다운 게이지 UI를 추가해 언제 다시 쓸 수 있는지 시각적으로 표시
+- `StageManager.stages`에 스테이지별 제한시간이나 특수 규칙(예: 마지막 스테이지는 시간 보너스 없음)을 추가해 스테이지마다 다른 긴장감 부여
+- `StageManager.RandomSpawnXZ()`가 코인끼리도 최소 거리를 두도록 검사를 추가해 겹쳐서 스폰되는 경우 방지
