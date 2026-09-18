@@ -8,6 +8,8 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
+    public bool IsGameOver => _isGameOver;
+
     private const string BestTimeKey = "RollCollect_BestTime";
 
     [Header("UI References")]

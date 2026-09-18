@@ -120,29 +120,52 @@ public static class SceneBuilder
         }
     }
 
-    private static readonly Vector3[] EnemyPositions =
+    private static readonly Vector3[] EnemySpawnPoints =
     {
         new Vector3(5f, 0f, 5f),
         new Vector3(-5f, 0f, -5f),
+        new Vector3(5f, 0f, -5f),
+        new Vector3(-5f, 0f, 5f),
     };
-    private static readonly float[] EnemySpeeds = { 3.5f, 4.5f };
+    private const float EnemyBaseSpeed = 3.5f;
+    private const float EnemySpawnInterval = 30f;
 
+    // Places one enemy immediately, then adds an EnemySpawner that spawns
+    // another every EnemySpawnInterval seconds (ramping difficulty up over
+    // a long round instead of starting with every enemy already active).
     private static void BuildEnemies()
     {
-        for (int i = 0; i < EnemyPositions.Length; i++)
+        BuildEnemy(EnemySpawnPoints[0], EnemyBaseSpeed);
+
+        GameObject spawnerObj = new GameObject("EnemySpawner");
+        EnemySpawner spawner = spawnerObj.AddComponent<EnemySpawner>();
+
+        SerializedObject spawnerSO = new SerializedObject(spawner);
+        SerializedProperty spawnPointsProp = spawnerSO.FindProperty("spawnPoints");
+        spawnPointsProp.arraySize = EnemySpawnPoints.Length;
+        for (int i = 0; i < EnemySpawnPoints.Length; i++)
         {
-            GameObject enemy = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            enemy.name = "Enemy";
-            enemy.transform.position = EnemyPositions[i];
-            SetInstanceColor(enemy, Color.red);
-
-            NavMeshAgent agent = enemy.AddComponent<NavMeshAgent>();
-            agent.baseOffset = 0.5f;
-            agent.speed = EnemySpeeds[i];
-            agent.radius = 0.4f;
-
-            enemy.AddComponent<EnemyChaser>();
+            spawnPointsProp.GetArrayElementAtIndex(i).vector3Value = EnemySpawnPoints[i];
         }
+        spawnerSO.FindProperty("spawnInterval").floatValue = EnemySpawnInterval;
+        spawnerSO.FindProperty("baseSpeed").floatValue = EnemyBaseSpeed;
+        spawnerSO.FindProperty("wavesSpawned").intValue = 1;
+        spawnerSO.ApplyModifiedProperties();
+    }
+
+    private static void BuildEnemy(Vector3 position, float speed)
+    {
+        GameObject enemy = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        enemy.name = "Enemy";
+        enemy.transform.position = position;
+        SetInstanceColor(enemy, Color.red);
+
+        NavMeshAgent agent = enemy.AddComponent<NavMeshAgent>();
+        agent.baseOffset = 0.5f;
+        agent.speed = speed;
+        agent.radius = 0.4f;
+
+        enemy.AddComponent<EnemyChaser>();
     }
 
     private static void SetInstanceColor(GameObject go, Color color)

@@ -35,6 +35,7 @@ UnityGame/
 │   │   ├── CollectibleItem.cs    # 회전하는 수집 아이템, 트리거 충돌 시 점수+사운드+파티클
 │   │   ├── EnemyPatrol.cs        # (더 이상 자동 빌드에선 안 씀) 패키지 없는 좌우 왕복 장애물 대안
 │   │   ├── EnemyChaser.cs        # NavMeshAgent로 플레이어를 실시간 추적하는 장애물
+│   │   ├── EnemySpawner.cs       # 30초마다 적을 한 마리씩 추가 스폰해 난이도를 올리는 런타임 스포너
 │   │   ├── ProceduralAudio.cs    # 외부 오디오 파일 없이 코드로 코인 획득 효과음 생성
 │   │   ├── ProceduralEffects.cs  # 내장 ParticleSystem으로 코인 획득 파티클 생성
 │   │   └── GameManager.cs        # 점수/승리 조건/제한시간/최고기록(PlayerPrefs)/재시작/UI 갱신을 담당하는 싱글턴
@@ -56,7 +57,8 @@ UnityGame/
    - `Player` 태그가 없으면 TagManager에 자동 등록
    - Floor(Plane) 생성 후 `NavMeshSurface`로 즉시 NavMesh를 굽고, Player(Sphere + Rigidbody + PlayerController) 생성
    - Main Camera에 `CinemachineBrain` 부착 + `CM FollowCamera`(`CinemachineCamera` + `CinemachineFollow` + `CinemachineRotationComposer`, target = Player) 생성
-   - Coin 6개(Trigger + CollectibleItem, 노란색 — 획득 시 콤보 판정 + 절차적 효과음(콤보에 따라 피치 상승) + 파티클 재생), Enemy 2마리(Cube + NavMeshAgent + EnemyChaser, 빨간색, 서로 다른 속도로 플레이어를 실시간 추적) 생성
+   - Coin 6개(Trigger + CollectibleItem, 노란색 — 획득 시 콤보 판정 + 절차적 효과음(콤보에 따라 피치 상승) + 파티클 재생) 생성
+   - Enemy 1마리(Cube + NavMeshAgent + EnemyChaser, 빨간색, 플레이어를 실시간 추적)를 즉시 배치하고, `EnemySpawner`가 30초마다 새 지점에 적을 한 마리씩 추가 스폰(속도도 점점 빨라짐)하도록 구성
    - Canvas + EventSystem, `ScoreText`/`TimerText`/`BestTimeText`/`ComboText`/`MessageText`/`RestartButton`(초기 비활성화) UI 생성
    - `GameManager` 오브젝트 생성 후 위 UI/설정 값을 `SerializedObject`로 전부 연결 (제한시간 60초, `RestartButton.OnClick → GameManager.RestartGame()` 포함)
    - 씬을 저장하고 `File > Build Settings`의 씬 목록에 자동 등록
@@ -124,7 +126,8 @@ UnityGame/
 - **ProceduralAudio**: `AudioClip.Create`로 샘플 배열(사인파 + 상승하는 주파수 + 제곱 감쇠 엔벌로프)을 직접 채워 짧은 "띵" 효과음을 생성합니다. 외부 오디오 에셋이 전혀 없어도 동작하며, 한 번 생성한 클립은 static 필드에 캐싱해 재사용합니다. `PlayPickupSound`는 임시 `AudioSource`를 직접 만들어 콤보 단계에 비례해 `pitch`를 최대 2배까지 올린 뒤 재생하고, 클립 길이(피치 보정 포함)만큼 뒤에 `Destroy`를 예약해 코인이 `Destroy(gameObject)`로 즉시 사라져도 소리가 끊기지 않습니다 (피치를 재생 전에 정해야 해서 `PlayClipAtPoint` 대신 이 방식을 씁니다).
 - **ProceduralEffects**: 내장 `ParticleSystem`을 코드로 구성(짧은 버스트, 구형 방출, `Sprites/Default` 셰이더)해 코인 위치에 파티클을 터뜨립니다. `ParticleSystemStopAction.Destroy`를 설정해 재생이 끝나면 별도 타이머 없이 오브젝트가 자동으로 사라집니다.
 - **EnemyPatrol** (수동 버전에서만 사용): `Mathf.PingPong`으로 왕복 운동을 구현 (별도 상태 머신 없이 시간 함수만으로 좌우 이동 구현).
-- **EnemyChaser (NavMeshAgent)**: `Awake()`에서 `Player` 태그로 플레이어를 찾아두고, `repathInterval`(기본 0.2초)마다 `NavMeshAgent.SetDestination(player.position)`을 호출해 목적지를 갱신합니다. 매 프레임 재계산하지 않고 일정 간격으로만 경로를 다시 잡아 CPU 비용을 줄이는, 실무에서 흔히 쓰는 최적화 패턴입니다. `NavMeshSurface.BuildNavMesh()`로 미리 구워둔 바닥 위를 자율적으로 길찾기하며 이동하고, `OnCollisionEnter`로 플레이어와 부딪히면 리스폰시킵니다. 자동 빌드에서는 서로 다른 위치·속도(3.5, 4.5)로 2마리를 배치해 난이도를 높였습니다 (`SceneBuilder.EnemyPositions`/`EnemySpeeds` 배열에 항목을 추가하면 더 늘릴 수 있음).
+- **EnemyChaser (NavMeshAgent)**: `Awake()`에서 `Player` 태그로 플레이어를 찾아두고, `repathInterval`(기본 0.2초)마다 `NavMeshAgent.SetDestination(player.position)`을 호출해 목적지를 갱신합니다. 매 프레임 재계산하지 않고 일정 간격으로만 경로를 다시 잡아 CPU 비용을 줄이는, 실무에서 흔히 쓰는 최적화 패턴입니다. `NavMeshSurface.BuildNavMesh()`로 미리 구워둔 바닥 위를 자율적으로 길찾기하며 이동하고, `OnCollisionEnter`로 플레이어와 부딪히면 리스폰시킵니다.
+- **EnemySpawner (시간에 따른 난이도 상승)**: 씬 시작 시 적 1마리(`wavesSpawned = 1`)로 출발해, `Update()`에서 `spawnInterval`(기본 30초)마다 `spawnPoints` 배열을 순환하며 새 적을 하나씩 생성합니다. `NavMeshAgent`/`EnemyChaser`가 붙은 큐브를 `SceneBuilder.BuildEnemy()`와 동일한 방식으로 런타임에 직접 만드는데, `GameObject.CreatePrimitive`/`AddComponent`는 에디터 전용이 아닌 일반 런타임 API라 빌드된 게임에서도 그대로 동작합니다. 새로 스폰되는 적마다 `speedIncreasePerWave`(기본 0.5)만큼 속도가 빨라지고, `maxEnemies`(기본 6)에 도달하면 더 이상 스폰하지 않으며, `GameManager.IsGameOver`가 `true`가 되면(승리/시간초과) 스폰도 즉시 멈춥니다.
 - **GameManager**: 싱글턴 패턴(`Instance`)으로 전역 접근을 제공하며, 씬 시작 시 `FindObjectsOfType<CollectibleItem>()`으로 전체 아이템 수를 캐싱해 승리 조건(`score >= total`)을 판정. 매 프레임 `_elapsedTime`을 누적해 실제 플레이 시간을 추적합니다(제한시간 모드를 꺼도 계속 기록됨).
 - **최고 기록 (PlayerPrefs)**: 승리 시 `_elapsedTime`을 `PlayerPrefs`의 `RollCollect_BestTime` 키에 저장된 이전 최고 기록과 비교해, 더 빠르면 갱신하고 "New Best Time!" 메시지를 보여줍니다. `PlayerPrefs`는 macOS에서는 `~/Library/Preferences/`, Windows에서는 레지스트리에 저장되어 에디터를 재시작하거나 씬을 재시작해도 유지됩니다. 화면 상단 중앙의 `BestTimeText`가 기록이 없으면 `Best: --`, 있으면 `Best: 12.3s` 형태로 항상 표시됩니다.
 - **제한시간 모드**: `Update()`에서 `Time.deltaTime`만큼 `_timeRemaining`을 감소시키고 `mm:ss` 형식으로 `TimerText`에 표시. 시간이 0이 되면 아직 승리하지 못한 경우 `Time's Up!` 메시지를 띄우고 `_isGameOver` 플래그로 이후의 `AddScore`/`RespawnPlayer` 호출을 무시합니다. 승리·시간초과 두 종료 조건 모두 `Time.timeScale = 0f`로 물리/애니메이션을 포함한 씬 전체를 정지시켜 별도의 입력 잠금 로직 없이 게임을 종료합니다. `Use Time Limit` 체크박스를 끄면 기존처럼 시간 제한 없이 플레이할 수 있습니다.
