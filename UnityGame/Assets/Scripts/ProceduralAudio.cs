@@ -10,6 +10,24 @@ public static class ProceduralAudio
         ? _coinPickupClip
         : _coinPickupClip = CreateCoinPickupClip();
 
+    // Plays the pickup clip with pitch rising per combo step, so chaining
+    // pickups quickly sounds increasingly satisfying. Uses a manually
+    // created AudioSource (rather than PlayClipAtPoint) because pitch
+    // needs to be set before playback starts.
+    public static void PlayPickupSound(Vector3 position, int combo)
+    {
+        GameObject audioObj = new GameObject("PickupSound");
+        audioObj.transform.position = position;
+
+        AudioSource source = audioObj.AddComponent<AudioSource>();
+        source.clip = CoinPickupClip;
+        source.pitch = Mathf.Min(1f + 0.1f * (combo - 1), 2f);
+        source.spatialBlend = 1f;
+        source.Play();
+
+        Object.Destroy(audioObj, CoinPickupClip.length / source.pitch);
+    }
+
     private static AudioClip CreateCoinPickupClip()
     {
         const int sampleRate = 44100;

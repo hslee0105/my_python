@@ -15,6 +15,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Text messageText;
     [SerializeField] private Text timerText;
     [SerializeField] private Text bestTimeText;
+    [SerializeField] private Text comboText;
     [SerializeField] private GameObject restartButton;
 
     [Header("Player")]
@@ -24,11 +25,20 @@ public class GameManager : MonoBehaviour
     [SerializeField] private bool useTimeLimit = true;
     [SerializeField] private float timeLimitSeconds = 60f;
 
+    [Header("Combo")]
+    [SerializeField] private float comboWindow = 1.5f;
+    [SerializeField] private float comboTimeBonusPerStep = 0.5f;
+    [SerializeField] private float comboTextDuration = 1f;
+
     private int _score;
     private int _totalCollectibles;
     private float _timeRemaining;
     private float _elapsedTime;
     private bool _isGameOver;
+
+    private int _combo;
+    private float _comboTimer;
+    private float _comboTextTimer;
 
     private void Awake()
     {
@@ -59,6 +69,14 @@ public class GameManager : MonoBehaviour
 
         _elapsedTime += Time.deltaTime;
 
+        if (_comboTimer > 0f) _comboTimer -= Time.deltaTime;
+
+        if (_comboTextTimer > 0f)
+        {
+            _comboTextTimer -= Time.deltaTime;
+            if (_comboTextTimer <= 0f && comboText != null) comboText.text = string.Empty;
+        }
+
         if (!useTimeLimit) return;
 
         _timeRemaining -= Time.deltaTime;
@@ -73,17 +91,36 @@ public class GameManager : MonoBehaviour
         UpdateTimerUI();
     }
 
-    public void AddScore(int amount)
+    // Returns the resulting combo count so the caller (e.g. the pickup
+    // sound) can react to it, such as raising pitch with each chained hit.
+    public int AddScore(int amount)
     {
-        if (_isGameOver) return;
+        if (_isGameOver) return _combo;
+
+        _combo = _comboTimer > 0f ? _combo + 1 : 1;
+        _comboTimer = comboWindow;
 
         _score += amount;
         UpdateScoreUI();
+
+        if (_combo > 1)
+        {
+            float bonus = comboTimeBonusPerStep * (_combo - 1);
+            if (useTimeLimit) _timeRemaining += bonus;
+
+            if (comboText != null)
+            {
+                comboText.text = $"Combo x{_combo}! +{bonus:0.0}s";
+                _comboTextTimer = comboTextDuration;
+            }
+        }
 
         if (_score >= _totalCollectibles)
         {
             ShowWinMessage();
         }
+
+        return _combo;
     }
 
     public void RespawnPlayer(GameObject player)

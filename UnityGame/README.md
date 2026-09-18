@@ -1,6 +1,6 @@
 # Unity 3D 게임 예제 — "Roll & Collect"
 
-Rigidbody 기반 물리 이동, Cinemachine 3인칭 추적 카메라, 회전하는 수집 아이템(픽업 사운드·파티클 포함), NavMeshAgent로 플레이어를 추적하는 장애물, 점수/승리 UI, 제한시간 모드, PlayerPrefs 기반 최고 기록, 그리고 재시작 버튼을 갖춘 3D 게임 예제입니다.
+Rigidbody 기반 물리 이동(대시 포함), Cinemachine 3인칭 추적 카메라, 회전하는 수집 아이템(콤보 시스템 + 픽업 사운드·파티클 포함), NavMeshAgent로 플레이어를 추적하는 장애물 여러 마리, 점수/승리 UI, 제한시간 모드, PlayerPrefs 기반 최고 기록, 그리고 재시작 버튼을 갖춘 3D 게임 예제입니다.
 
 ## 개발 환경
 
@@ -56,8 +56,8 @@ UnityGame/
    - `Player` 태그가 없으면 TagManager에 자동 등록
    - Floor(Plane) 생성 후 `NavMeshSurface`로 즉시 NavMesh를 굽고, Player(Sphere + Rigidbody + PlayerController) 생성
    - Main Camera에 `CinemachineBrain` 부착 + `CM FollowCamera`(`CinemachineCamera` + `CinemachineFollow` + `CinemachineRotationComposer`, target = Player) 생성
-   - Coin 6개(Trigger + CollectibleItem, 노란색 — 획득 시 절차적 효과음 + 파티클 재생), Enemy(Cube + NavMeshAgent + EnemyChaser, 빨간색, 플레이어를 실시간 추적) 생성
-   - Canvas + EventSystem, `ScoreText`/`TimerText`/`BestTimeText`/`MessageText`/`RestartButton`(초기 비활성화) UI 생성
+   - Coin 6개(Trigger + CollectibleItem, 노란색 — 획득 시 콤보 판정 + 절차적 효과음(콤보에 따라 피치 상승) + 파티클 재생), Enemy 2마리(Cube + NavMeshAgent + EnemyChaser, 빨간색, 서로 다른 속도로 플레이어를 실시간 추적) 생성
+   - Canvas + EventSystem, `ScoreText`/`TimerText`/`BestTimeText`/`ComboText`/`MessageText`/`RestartButton`(초기 비활성화) UI 생성
    - `GameManager` 오브젝트 생성 후 위 UI/설정 값을 `SerializedObject`로 전부 연결 (제한시간 60초, `RestartButton.OnClick → GameManager.RestartGame()` 포함)
    - 씬을 저장하고 `File > Build Settings`의 씬 목록에 자동 등록
 4. 콘솔에 `Roll & Collect scene built and saved to Assets/Scenes/MainScene.unity. Press Play to test.` 로그가 뜨면 완료. 바로 상단 ▶ Play 버튼을 눌러 플레이합니다.
@@ -111,17 +111,20 @@ UnityGame/
 |---|---|
 | W / A / S / D (또는 방향키) | 이동 |
 | Space | 점프 (지면에 닿아 있을 때만) |
+| Left Shift | 대시 (이동 중일 때만, 쿨다운 1초) |
 
 ## 동작 원리 요약
 
 - **PlayerController**: `Input.GetAxisRaw`로 수평/수직 입력을 받아 `Rigidbody.velocity`의 X/Z 성분만 직접 갱신 (물리 엔진의 관성/충돌 반응은 유지하면서 즉각적인 반응성을 확보). `Physics.Raycast`로 접지 여부를 판정해 이중 점프를 방지.
+- **대시**: `Update()`에서 Shift 입력과 쿨다운을 체크해 `_dashDirection`/`_dashTimeRemaining`을 세팅하고, `FixedUpdate()`에서 `_dashTimeRemaining > 0`인 동안은 평소 이동 속도 대신 `dashSpeed`(기본 20)로 X/Z 속도를 덮어씁니다. 이동 입력이 없을 때는 대시가 발동하지 않도록 `_moveInput.sqrMagnitude > 0.01f`로 가드하며, 쿨다운(기본 1초)이 끝나기 전에는 재발동을 막습니다.
 - **CameraFollow** (수동 버전에서만 사용): `Vector3.SmoothDamp`로 목표 오프셋 위치를 향해 매끄럽게 추적하고, `LookAt`으로 항상 플레이어를 주시.
 - **Cinemachine 카메라 (자동 빌드 기본값)**: 실제 `Camera`에는 `CinemachineBrain`만 부착해 "어떤 가상 카메라가 지금 화면을 제어할지" 결정하는 역할을 맡기고, 별도의 `CM FollowCamera` 오브젝트에 실제 추적 로직을 둡니다. `CinemachineCamera.Follow`/`LookAt`으로 대상을 지정하고, Position Control 역할의 `CinemachineFollow`(오프셋 `(0, 6, -8)` 유지)와 Rotation Control 역할의 `CinemachineRotationComposer`(화면 구도 안에 대상을 계속 붙잡아둠)를 조합합니다. 이 둘의 역할 분리(Follow=위치, RotationComposer=조준)가 Cinemachine 3.x의 표준 카메라 파이프라인 구성 방식입니다.
-- **CollectibleItem**: `OnTriggerEnter`에서 태그가 `Player`인 콜라이더만 필터링해 점수를 올리고, `ProceduralAudio`/`ProceduralEffects`로 효과음·파티클을 재생한 뒤 자기 자신을 파괴. `Time.deltaTime` 기반 회전으로 시각적 피드백 제공.
-- **ProceduralAudio**: `AudioClip.Create`로 샘플 배열(사인파 + 상승하는 주파수 + 제곱 감쇠 엔벌로프)을 직접 채워 짧은 "띵" 효과음을 생성합니다. 외부 오디오 에셋이 전혀 없어도 동작하며, 한 번 생성한 클립은 static 필드에 캐싱해 재사용합니다. `AudioSource.PlayClipAtPoint`로 재생하는데, 이 API는 임시 오브젝트를 만들어 재생 후 스스로 파괴하므로 `Destroy(gameObject)`로 코인이 즉시 사라져도 소리가 끊기지 않습니다.
+- **CollectibleItem**: `OnTriggerEnter`에서 태그가 `Player`인 콜라이더만 필터링해 `GameManager.AddScore()`를 호출하고, 반환된 콤보 수치로 `ProceduralAudio`/`ProceduralEffects`를 재생한 뒤 자기 자신을 파괴. `Time.deltaTime` 기반 회전으로 시각적 피드백 제공.
+- **콤보 시스템**: `GameManager.AddScore()`가 호출될 때마다 직전 픽업 이후 `comboWindow`(기본 1.5초) 이내였는지 확인해 콤보를 이어가거나(`_combo + 1`) 새로 시작합니다(`_combo = 1`). 콤보 2단계부터는 `comboTimeBonusPerStep × (combo - 1)`만큼 제한시간을 되돌려주고 `ComboText`에 "Combo x3! +1.0s" 형태로 잠깐(기본 1초) 표시합니다. `AddScore`가 현재 콤보 수치를 반환하므로, `CollectibleItem`은 이 값을 그대로 `ProceduralAudio.PlayPickupSound`에 넘겨 피치를 올립니다. 콤보는 점수/승리 판정(`_score >= _totalCollectibles`)과는 완전히 분리되어 있어, 아무리 콤보가 쌓여도 코인을 실제로 다 모아야 승리합니다.
+- **ProceduralAudio**: `AudioClip.Create`로 샘플 배열(사인파 + 상승하는 주파수 + 제곱 감쇠 엔벌로프)을 직접 채워 짧은 "띵" 효과음을 생성합니다. 외부 오디오 에셋이 전혀 없어도 동작하며, 한 번 생성한 클립은 static 필드에 캐싱해 재사용합니다. `PlayPickupSound`는 임시 `AudioSource`를 직접 만들어 콤보 단계에 비례해 `pitch`를 최대 2배까지 올린 뒤 재생하고, 클립 길이(피치 보정 포함)만큼 뒤에 `Destroy`를 예약해 코인이 `Destroy(gameObject)`로 즉시 사라져도 소리가 끊기지 않습니다 (피치를 재생 전에 정해야 해서 `PlayClipAtPoint` 대신 이 방식을 씁니다).
 - **ProceduralEffects**: 내장 `ParticleSystem`을 코드로 구성(짧은 버스트, 구형 방출, `Sprites/Default` 셰이더)해 코인 위치에 파티클을 터뜨립니다. `ParticleSystemStopAction.Destroy`를 설정해 재생이 끝나면 별도 타이머 없이 오브젝트가 자동으로 사라집니다.
 - **EnemyPatrol** (수동 버전에서만 사용): `Mathf.PingPong`으로 왕복 운동을 구현 (별도 상태 머신 없이 시간 함수만으로 좌우 이동 구현).
-- **EnemyChaser (NavMeshAgent)**: `Awake()`에서 `Player` 태그로 플레이어를 찾아두고, `repathInterval`(기본 0.2초)마다 `NavMeshAgent.SetDestination(player.position)`을 호출해 목적지를 갱신합니다. 매 프레임 재계산하지 않고 일정 간격으로만 경로를 다시 잡아 CPU 비용을 줄이는, 실무에서 흔히 쓰는 최적화 패턴입니다. `NavMeshSurface.BuildNavMesh()`로 미리 구워둔 바닥 위를 자율적으로 길찾기하며 이동하고, `OnCollisionEnter`로 플레이어와 부딪히면 리스폰시킵니다.
+- **EnemyChaser (NavMeshAgent)**: `Awake()`에서 `Player` 태그로 플레이어를 찾아두고, `repathInterval`(기본 0.2초)마다 `NavMeshAgent.SetDestination(player.position)`을 호출해 목적지를 갱신합니다. 매 프레임 재계산하지 않고 일정 간격으로만 경로를 다시 잡아 CPU 비용을 줄이는, 실무에서 흔히 쓰는 최적화 패턴입니다. `NavMeshSurface.BuildNavMesh()`로 미리 구워둔 바닥 위를 자율적으로 길찾기하며 이동하고, `OnCollisionEnter`로 플레이어와 부딪히면 리스폰시킵니다. 자동 빌드에서는 서로 다른 위치·속도(3.5, 4.5)로 2마리를 배치해 난이도를 높였습니다 (`SceneBuilder.EnemyPositions`/`EnemySpeeds` 배열에 항목을 추가하면 더 늘릴 수 있음).
 - **GameManager**: 싱글턴 패턴(`Instance`)으로 전역 접근을 제공하며, 씬 시작 시 `FindObjectsOfType<CollectibleItem>()`으로 전체 아이템 수를 캐싱해 승리 조건(`score >= total`)을 판정. 매 프레임 `_elapsedTime`을 누적해 실제 플레이 시간을 추적합니다(제한시간 모드를 꺼도 계속 기록됨).
 - **최고 기록 (PlayerPrefs)**: 승리 시 `_elapsedTime`을 `PlayerPrefs`의 `RollCollect_BestTime` 키에 저장된 이전 최고 기록과 비교해, 더 빠르면 갱신하고 "New Best Time!" 메시지를 보여줍니다. `PlayerPrefs`는 macOS에서는 `~/Library/Preferences/`, Windows에서는 레지스트리에 저장되어 에디터를 재시작하거나 씬을 재시작해도 유지됩니다. 화면 상단 중앙의 `BestTimeText`가 기록이 없으면 `Best: --`, 있으면 `Best: 12.3s` 형태로 항상 표시됩니다.
 - **제한시간 모드**: `Update()`에서 `Time.deltaTime`만큼 `_timeRemaining`을 감소시키고 `mm:ss` 형식으로 `TimerText`에 표시. 시간이 0이 되면 아직 승리하지 못한 경우 `Time's Up!` 메시지를 띄우고 `_isGameOver` 플래그로 이후의 `AddScore`/`RespawnPlayer` 호출을 무시합니다. 승리·시간초과 두 종료 조건 모두 `Time.timeScale = 0f`로 물리/애니메이션을 포함한 씬 전체를 정지시켜 별도의 입력 잠금 로직 없이 게임을 종료합니다. `Use Time Limit` 체크박스를 끄면 기존처럼 시간 제한 없이 플레이할 수 있습니다.
@@ -132,6 +135,7 @@ UnityGame/
 
 - `Rigidbody.AddForce` 대신 `CharacterController`로 전환해 계단/경사 처리 개선
 - `CinemachineDeoccluder`(구 Collider extension)로 장애물에 카메라가 가려질 때 자동 회피
-- 코인마다 서로 다른 음높이의 픽업 사운드를 재생해 콤보처럼 들리게 하기 (`ProceduralAudio`에 주파수 파라미터 추가)
-- 여러 마리의 `EnemyChaser`를 배치하고 순찰(EnemyPatrol)과 추적을 상태 전환(플레이어 발견 전/후)으로 조합
+- `EnemyChaser`에 순찰↔추적 상태 전환 추가 (플레이어가 일정 거리 안에 들어오기 전까지는 `EnemyPatrol`처럼 왕복하다가, 감지되면 추적 모드로 전환)
+- 파워업 아이템(무적, 속도 증가, 시간 추가) 추가 — `CollectibleItem`을 상속하거나 별도 컴포넌트로 구현
 - 최고 기록뿐 아니라 최고 점수(`RollCollect_BestScore`)도 별도로 `PlayerPrefs`에 저장해 시간초과로 끝난 라운드의 기록도 남기기
+- 대시에 쿨다운 게이지 UI를 추가해 언제 다시 쓸 수 있는지 시각적으로 표시

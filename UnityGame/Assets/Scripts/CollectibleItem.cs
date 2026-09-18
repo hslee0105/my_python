@@ -22,6 +22,7 @@ public class CollectibleItem : MonoBehaviour
     {
         if (!other.CompareTag("Player")) return;
 
+        int combo = 1;
         if (GameManager.Instance == null)
         {
             Debug.LogError("CollectibleItem: no GameManager in the scene (score will not be tracked). " +
@@ -29,10 +30,10 @@ public class CollectibleItem : MonoBehaviour
         }
         else
         {
-            GameManager.Instance.AddScore(scoreValue);
+            combo = GameManager.Instance.AddScore(scoreValue);
         }
 
-        AudioSource.PlayClipAtPoint(ProceduralAudio.CoinPickupClip, transform.position);
+        ProceduralAudio.PlayPickupSound(transform.position, combo);
         ProceduralEffects.SpawnPickupBurst(transform.position, Color.yellow);
 
         Destroy(gameObject);

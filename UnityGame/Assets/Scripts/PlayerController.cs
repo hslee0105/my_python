@@ -13,9 +13,18 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float groundCheckDistance = 0.6f;
     [SerializeField] private LayerMask groundMask = ~0;
 
+    [Header("Dash")]
+    [SerializeField] private float dashSpeed = 20f;
+    [SerializeField] private float dashDuration = 0.15f;
+    [SerializeField] private float dashCooldown = 1f;
+
     private Rigidbody _rb;
     private Vector3 _moveInput;
     private bool _isGrounded;
+
+    private Vector3 _dashDirection;
+    private float _dashTimeRemaining;
+    private float _dashCooldownTimer;
 
     private void Awake()
     {
@@ -35,14 +44,35 @@ public class PlayerController : MonoBehaviour
         {
             _rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
         }
+
+        if (_dashCooldownTimer > 0f) _dashCooldownTimer -= Time.deltaTime;
+
+        if (Input.GetKeyDown(KeyCode.LeftShift) && _dashCooldownTimer <= 0f && _moveInput.sqrMagnitude > 0.01f)
+        {
+            _dashDirection = _moveInput;
+            _dashTimeRemaining = dashDuration;
+            _dashCooldownTimer = dashCooldown;
+        }
     }
 
     private void FixedUpdate()
     {
-        Vector3 targetVelocity = _moveInput * moveSpeed;
         Vector3 velocity = _rb.linearVelocity;
-        velocity.x = targetVelocity.x;
-        velocity.z = targetVelocity.z;
+
+        if (_dashTimeRemaining > 0f)
+        {
+            _dashTimeRemaining -= Time.fixedDeltaTime;
+            Vector3 dashVelocity = _dashDirection * dashSpeed;
+            velocity.x = dashVelocity.x;
+            velocity.z = dashVelocity.z;
+        }
+        else
+        {
+            Vector3 targetVelocity = _moveInput * moveSpeed;
+            velocity.x = targetVelocity.x;
+            velocity.z = targetVelocity.z;
+        }
+
         _rb.linearVelocity = velocity;
     }
 }

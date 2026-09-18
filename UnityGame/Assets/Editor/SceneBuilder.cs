@@ -38,13 +38,13 @@ public static class SceneBuilder
         GameObject player = BuildPlayer();
         BuildCinemachineCamera(player.transform);
         BuildCollectibles();
-        BuildEnemy();
+        BuildEnemies();
 
-        Text scoreText, timerText, bestTimeText, messageText;
+        Text scoreText, timerText, bestTimeText, comboText, messageText;
         GameObject restartButtonObj;
-        BuildUI(out scoreText, out timerText, out bestTimeText, out messageText, out restartButtonObj);
+        BuildUI(out scoreText, out timerText, out bestTimeText, out comboText, out messageText, out restartButtonObj);
 
-        BuildGameManager(scoreText, timerText, bestTimeText, messageText, restartButtonObj);
+        BuildGameManager(scoreText, timerText, bestTimeText, comboText, messageText, restartButtonObj);
 
         SaveSceneAndRegister(scene);
 
@@ -120,19 +120,29 @@ public static class SceneBuilder
         }
     }
 
-    private static void BuildEnemy()
+    private static readonly Vector3[] EnemyPositions =
     {
-        GameObject enemy = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        enemy.name = "Enemy";
-        enemy.transform.position = new Vector3(5f, 0f, 5f);
-        SetInstanceColor(enemy, Color.red);
+        new Vector3(5f, 0f, 5f),
+        new Vector3(-5f, 0f, -5f),
+    };
+    private static readonly float[] EnemySpeeds = { 3.5f, 4.5f };
 
-        NavMeshAgent agent = enemy.AddComponent<NavMeshAgent>();
-        agent.baseOffset = 0.5f;
-        agent.speed = 3.5f;
-        agent.radius = 0.4f;
+    private static void BuildEnemies()
+    {
+        for (int i = 0; i < EnemyPositions.Length; i++)
+        {
+            GameObject enemy = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            enemy.name = "Enemy";
+            enemy.transform.position = EnemyPositions[i];
+            SetInstanceColor(enemy, Color.red);
 
-        enemy.AddComponent<EnemyChaser>();
+            NavMeshAgent agent = enemy.AddComponent<NavMeshAgent>();
+            agent.baseOffset = 0.5f;
+            agent.speed = EnemySpeeds[i];
+            agent.radius = 0.4f;
+
+            enemy.AddComponent<EnemyChaser>();
+        }
     }
 
     private static void SetInstanceColor(GameObject go, Color color)
@@ -142,7 +152,7 @@ public static class SceneBuilder
         renderer.sharedMaterial = instanceMaterial;
     }
 
-    private static void BuildUI(out Text scoreText, out Text timerText, out Text bestTimeText, out Text messageText, out GameObject restartButtonObj)
+    private static void BuildUI(out Text scoreText, out Text timerText, out Text bestTimeText, out Text comboText, out Text messageText, out GameObject restartButtonObj)
     {
         GameObject canvasObj = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         Canvas canvas = canvasObj.GetComponent<Canvas>();
@@ -168,6 +178,11 @@ public static class SceneBuilder
         bestTimeText = CreateUIText(canvasObj.transform, "BestTimeText",
             new Vector2(0.5f, 1f), new Vector2(0f, -40f), new Vector2(280f, 50f),
             "Best: --", TextAnchor.MiddleCenter);
+
+        comboText = CreateUIText(canvasObj.transform, "ComboText",
+            new Vector2(0f, 1f), new Vector2(150f, -90f), new Vector2(320f, 50f),
+            string.Empty, TextAnchor.MiddleLeft);
+        comboText.color = Color.yellow;
 
         messageText = CreateUIText(canvasObj.transform, "MessageText",
             new Vector2(0.5f, 0.5f), new Vector2(0f, 60f), new Vector2(700f, 80f),
@@ -232,7 +247,7 @@ public static class SceneBuilder
         return buttonObj;
     }
 
-    private static void BuildGameManager(Text scoreText, Text timerText, Text bestTimeText, Text messageText, GameObject restartButtonObj)
+    private static void BuildGameManager(Text scoreText, Text timerText, Text bestTimeText, Text comboText, Text messageText, GameObject restartButtonObj)
     {
         GameObject gmObj = new GameObject("GameManager");
         GameManager gameManager = gmObj.AddComponent<GameManager>();
@@ -241,6 +256,7 @@ public static class SceneBuilder
         gmSO.FindProperty("scoreText").objectReferenceValue = scoreText;
         gmSO.FindProperty("timerText").objectReferenceValue = timerText;
         gmSO.FindProperty("bestTimeText").objectReferenceValue = bestTimeText;
+        gmSO.FindProperty("comboText").objectReferenceValue = comboText;
         gmSO.FindProperty("messageText").objectReferenceValue = messageText;
         gmSO.FindProperty("restartButton").objectReferenceValue = restartButtonObj;
         gmSO.FindProperty("playerSpawnPoint").vector3Value = new Vector3(0f, 1f, 0f);
