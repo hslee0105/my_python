@@ -36,7 +36,7 @@ UnityGame/
 │   │   ├── EnemyPatrol.cs        # (더 이상 자동 빌드에선 안 씀) 패키지 없는 좌우 왕복 장애물 대안
 │   │   ├── EnemyChaser.cs        # NavMeshAgent로 플레이어를 실시간 추적, 충돌 시 즉시 게임오버
 │   │   ├── EnemySpawner.cs       # 스테이지 진행 중 일정 시간마다 적을 한 마리씩 추가 스폰
-│   │   ├── GameObjectFactory.cs  # 코인/적 오브젝트를 만드는 공용 헬퍼 (SceneBuilder/StageManager/EnemySpawner가 공유)
+│   │   ├── GameObjectFactory.cs  # 코인/적 오브젝트를 만드는 공용 헬퍼 (StageManager/EnemySpawner가 공유). Assets/Resources/EnemyCharacter.prefab이 있으면 자동으로 사용
 │   │   ├── StageManager.cs       # 스테이지별로 코인/적을 랜덤 배치하고, 클리어 시 다음 스테이지로 전환
 │   │   ├── ProceduralAudio.cs    # 외부 오디오 파일 없이 코드로 코인 획득 효과음 생성
 │   │   ├── ProceduralEffects.cs  # 내장 ParticleSystem으로 코인 획득 파티클 생성
@@ -69,7 +69,7 @@ UnityGame/
 
 ## 실제 리깅 캐릭터로 교체하기 (선택)
 
-기본 마스코트(Capsule + 머리) 대신 진짜 사람 모양의 리깅된 캐릭터를 쓰고 싶다면, Asset Store에서 무료 캐릭터를 받아 아래 규칙대로 배치하면 `SceneBuilder`가 자동으로 그걸 사용합니다.
+기본 마스코트(Capsule + 머리)나 빨간 큐브 적 대신 진짜 사람 모양의 리깅된 캐릭터를 쓰고 싶다면, Asset Store에서 무료 캐릭터를 받아 아래 규칙대로 배치하면 자동으로 그걸 사용합니다. **플레이어**는 `Assets/Resources/PlayerCharacter.prefab`, **적**은 `Assets/Resources/EnemyCharacter.prefab` — 이름만 다르고 절차는 동일합니다(같은 캐릭터를 색만 다르게 복제해서 둘 다에 써도 되고, 서로 다른 캐릭터를 써도 됩니다).
 
 ### 1. 캐릭터 찾기 (검색해볼 만한 후보)
 
@@ -88,18 +88,22 @@ Asset Store 목록은 계속 바뀌기 때문에 정확히 이 이름들이 지�
 3. 방금 추가한 에셋 선택 → **Download** → **Import** → 임포트 창에서 **Import** 버튼 클릭 (전체 선택된 채로 두면 됨)
 4. Project 창에서 임포트된 폴더 안의 **캐릭터 프리팹**(보통 `Prefabs` 폴더 안에 있고, 파란색 정육면체 아이콘)을 찾습니다.
 
-### 3. `PlayerCharacter`로 등록
+### 3. `PlayerCharacter` / `EnemyCharacter`로 등록
 
 1. Project 창에서 `Assets` 폴더 아래에 **`Resources`** 라는 이름의 폴더가 없다면 새로 만듭니다 (우클릭 → `Create > Folder`, 이름을 정확히 `Resources`로).
-2. 찾은 캐릭터 프리팹을 **복사해서** `Assets/Resources/` 안에 넣고, 이름을 정확히 **`PlayerCharacter`**로 바꿉니다 (원본 프리팹은 그대로 두고 복사본을 씁니다 — 이름이 겹치면 안 됩니다).
-3. 상단 메뉴 **`Tools > Roll & Collect > Build Scene`**을 다시 실행합니다. 콘솔 로그가 뜨면 `Assets/Resources/PlayerCharacter.prefab`을 자동으로 찾아서 그 캐릭터로 플레이어를 만듭니다 (없으면 예전처럼 기본 마스코트를 씁니다).
+2. 찾은 캐릭터 프리팹을 **복사해서** `Assets/Resources/` 안에 넣고,
+   - 플레이어로 쓰려면 이름을 정확히 **`PlayerCharacter`**로,
+   - 적으로 쓰려면 (같은 프리팹을 한 번 더 복사하거나 다른 캐릭터를 받아서) 이름을 정확히 **`EnemyCharacter`**로 바꿉니다.
+   (원본 프리팹은 그대로 두고 복사본을 씁니다 — 이름이 겹치면 안 됩니다.)
+3. 상단 메뉴 **`Tools > Roll & Collect > Build Scene`**을 다시 실행합니다. `PlayerCharacter`는 씬을 새로 빌드해야 반영되지만, **`EnemyCharacter`는 씬을 다시 빌드하지 않고 그냥 Play만 눌러도 적용됩니다** — 적은 `GameObjectFactory.CreateEnemy()`가 매번 스테이지 시작/스폰 시점에 `Resources.Load`로 즉석에서 찾아 만들기 때문입니다 (반대로 `PlayerCharacter`는 씬을 만드는 시점에 한 번만 확인하는 `SceneBuilder`가 처리하므로 재빌드가 필요합니다).
 
 ### 4. 흔히 조정이 필요한 부분
 
-- **캐릭터가 옆으로/거꾸로 걷는 것처럼 보임**: 임포트마다 모델이 기본으로 바라보는 방향(+Z가 아닐 수 있음)이 달라서 그렇습니다. `Player` 오브젝트의 `Player Controller` 컴포넌트에서 **`Model Forward Offset`** 값을 90, 180, -90 등으로 바꿔가며 캐릭터가 이동 방향을 제대로 보는 각도를 찾으세요.
-- **캐릭터가 바닥에 파묻히거나 떠 있음**: 대부분의 리깅 캐릭터는 발 위치가 피벗(원점)이라 `y = 0`에 놓이도록 만들어뒀는데, 특정 에셋은 다를 수 있습니다. `Player` 오브젝트를 선택해 Scene 뷰에서 Y 위치를 손으로 조정해보고, 맞는 값을 찾으면 `GameManager`의 `Player Spawn Point` Y 값도 똑같이 맞춰주세요.
-- **걷는 애니메이션이 재생되지 않음**: 캐릭터에 `Animator`와 애니메이션은 있지만, `Player Controller`의 **`Speed Parameter Name`**(기본값 `"Speed"`)이 그 캐릭터의 Animator Controller에 있는 실제 파라미터 이름과 다르면 무시됩니다. 캐릭터를 선택해 Inspector에서 `Animator` 컴포넌트의 Controller를 더블클릭해 Animator 창을 열고, `Parameters` 탭에서 이동 속도를 나타내는 float 파라미터 이름을 확인해 `Speed Parameter Name`에 그대로 입력하세요. 파라미터가 없거나 애니메이션 자체가 이동 속도와 연결되어 있지 않다면(예: 애니메이션 전환이 다른 방식으로 되어 있음), 이 부분은 해당 에셋 구조를 보면서 추가로 손봐야 할 수 있습니다 — 어떤 에셋을 받으셨는지, Animator Controller 구조가 어떻게 생겼는지 알려주시면 이어서 도와드릴게요.
-- 콜라이더 크기가 안 맞아서 코인을 못 먹거나 적과 이상하게 충돌한다면, `Player`의 `Capsule Collider` 컴포넌트에서 `Radius`/`Height`/`Center`를 캐릭터 실제 크기에 맞게 조정하세요.
+- **캐릭터가 옆으로/거꾸로 걷는 것처럼 보임**: 임포트마다 모델이 기본으로 바라보는 방향(+Z가 아닐 수 있음)이 달라서 그렇습니다. `Player` 오브젝트의 `Player Controller` 컴포넌트에서 **`Model Forward Offset`** 값을 90, 180, -90 등으로 바꿔가며 캐릭터가 이동 방향을 제대로 보는 각도를 찾으세요. (적은 `NavMeshAgent`가 자체적으로 이동 방향을 보도록 회전시키는데, 마찬가지로 모델이 +Z를 안 보고 있으면 어색하게 보일 수 있습니다 — 이 경우는 `EnemyChaser`에 별도 보정 로직을 추가해야 하니 알려주세요.)
+- **애니메이션 자체가 회전 방향에 안 맞는 걸음걸이로 보임(옆으로 도는 건 정상인데 걷는 모션만 이상함)**: 이건 모델 방향 문제가 아니라 **그 캐릭터의 Animator Controller 구조**(이동 방향별로 다른 클립을 쓰는 Blend Tree 등) 문제일 수 있습니다. 게임 플레이에 지장이 없다면 넘어가도 되고, 정교하게 고치려면 Animator Controller의 `Parameters`/State 구성을 알려주시면 맞춰드릴 수 있습니다.
+- **캐릭터가 바닥에 파묻히거나 떠 있음**: 대부분의 리깅 캐릭터는 발 위치가 피벗(원점)이라 `y = 0`에 놓이도록 만들어뒀는데, 특정 에셋은 다를 수 있습니다. `Player`/`Enemy` 오브젝트를 선택해 Scene 뷰에서 Y 위치를 손으로 조정해보고, 맞는 값을 찾으면(플레이어의 경우) `GameManager`의 `Player Spawn Point` Y 값도 똑같이 맞춰주세요.
+- **걷는 애니메이션이 재생되지 않음(플레이어)**: 캐릭터에 `Animator`와 애니메이션은 있지만, `Player Controller`의 **`Speed Parameter Name`**(기본값 `"Speed"`)이 그 캐릭터의 Animator Controller에 있는 실제 파라미터 이름과 다르면 무시됩니다. 캐릭터를 선택해 Inspector에서 `Animator` 컴포넌트의 Controller를 더블클릭해 Animator 창을 열고, `Parameters` 탭에서 이동 속도를 나타내는 float 파라미터 이름을 확인해 `Speed Parameter Name`에 그대로 입력하세요.
+- 콜라이더 크기가 안 맞아서 코인을 못 먹거나 적과 이상하게 충돌한다면, 해당 오브젝트의 `Capsule Collider` 컴포넌트에서 `Radius`/`Height`/`Center`를 캐릭터 실제 크기에 맞게 조정하세요.
 
 ## 수동 씬 구성 단계 (참고용 / 패키지 없이 단순 버전을 원할 때)
 
@@ -165,7 +169,7 @@ Asset Store 목록은 계속 바뀌기 때문에 정확히 이 이름들이 지�
 - **ProceduralEffects**: 내장 `ParticleSystem`을 코드로 구성(짧은 버스트, 구형 방출, `Sprites/Default` 셰이더)해 코인 위치에 파티클을 터뜨립니다. `ParticleSystemStopAction.Destroy`를 설정해 재생이 끝나면 별도 타이머 없이 오브젝트가 자동으로 사라집니다.
 - **EnemyPatrol** (수동 버전에서만 사용): `Mathf.PingPong`으로 왕복 운동을 구현 (별도 상태 머신 없이 시간 함수만으로 좌우 이동 구현). 이 버전은 부딪혀도 `GameManager.RespawnPlayer()`로 리스폰만 시킵니다.
 - **EnemyChaser (NavMeshAgent)**: `Awake()`에서 `Player` 태그로 플레이어를 찾아두고, `repathInterval`(기본 0.2초)마다 `NavMeshAgent.SetDestination(player.position)`을 호출해 목적지를 갱신합니다. 매 프레임 재계산하지 않고 일정 간격으로만 경로를 다시 잡아 CPU 비용을 줄이는, 실무에서 흔히 쓰는 최적화 패턴입니다. `NavMeshSurface.BuildNavMesh()`로 미리 구워둔 바닥 위를 자율적으로 길찾기하며 이동하고, `OnCollisionEnter`로 플레이어와 부딪히면 **`GameManager.LoseGame()`을 호출해 즉시 게임을 종료**합니다 (리스폰 없음 — 리스폰이 필요한 단순 버전은 `EnemyPatrol`을 쓰세요).
-- **GameObjectFactory**: 코인/적 큐브를 만드는 코드(프리미티브 생성, 콜라이더 설정, 색상 지정, `NavMeshAgent`/`EnemyChaser`/`CollectibleItem` 부착)를 한 곳에 모아둔 정적 헬퍼입니다. `SceneBuilder`(에디터), `StageManager`·`EnemySpawner`(런타임) 세 곳에서 똑같은 방식으로 오브젝트를 만들어야 해서, 중복 대신 이 헬퍼를 공유합니다.
+- **GameObjectFactory**: 코인/적을 만드는 코드(프리미티브 또는 임포트 캐릭터 생성, 콜라이더 설정, 색상 지정, `NavMeshAgent`/`EnemyChaser`/`CollectibleItem` 부착)를 한 곳에 모아둔 정적 헬퍼입니다. `StageManager`·`EnemySpawner`(둘 다 런타임)에서 똑같은 방식으로 오브젝트를 만들어야 해서, 중복 대신 이 헬퍼를 공유합니다. `CreateEnemy()`는 `Resources.Load<GameObject>("EnemyCharacter")`를 매번 새로 호출해서, `Assets/Resources/EnemyCharacter.prefab`이 있으면 `Object.Instantiate`로 그 캐릭터를 쓰고 없으면 빨간 큐브를 씁니다(`PrefabUtility`가 아니라 `Object.Instantiate`를 쓰는 이유는, 이 클래스가 런타임 어셈블리에 있어서 빌드에도 포함되기 때문 — 에디터 전용 API는 쓸 수 없습니다). 씬을 다시 빌드할 필요 없이 **다음 스폰/스테이지 전환 시점부터 바로 적용**되는 이유이기도 합니다.
 - **StageManager (스테이지 진행)**: 씬에는 코인/적을 전혀 미리 배치하지 않고, `Start()`에서 `GameManager.Instance.EnableMultiStageMode()`로 GameManager를 "스테이지 모드"로 전환한 뒤 스테이지 1을 만듭니다. `stages` 배열(기본 3단계: 6/1마리 → 8/2마리 → 10/3마리)에 정의된 개수만큼 `GameObjectFactory`로 코인·적을 생성하는데, 위치는 `RandomSpawnXZ()`가 지정한 사각 영역(`spawnAreaMin`~`spawnAreaMax`) 안에서 매번 새로 뽑고 플레이어 시작 지점과 너무 가까우면 다시 뽑습니다(최대 20회 시도). 생성한 코인 개수는 `GameManager.SetStageCollectibleCount()`로 알려줘 그 스테이지의 승리 기준으로 삼습니다. `GameManager.OnStageCollected` 이벤트(스테이지 모드에서 `_score >= _totalCollectibles`가 될 때 발생)를 구독해두었다가, 이벤트가 오면 기존 오브젝트를 전부 `Destroy`하고 다음 스테이지를 만들며 `ShowTemporaryMessage()`로 "Stage 2 / 3!" 같은 안내를 잠깐 띄웁니다. 마지막 스테이지까지 클리어하면 다음 스테이지를 만드는 대신 `GameManager.ShowWinMessage()`를 직접 호출해 기존 승리 화면(최고 기록 저장 포함)으로 마무리합니다.
 - **EnemySpawner (스테이지 내 시간 경과 난이도 상승)**: 이제 Inspector가 아니라 `Initialize(...)` 메서드로 설정을 주입받습니다 — `StageManager`가 각 스테이지를 만들 때마다 그 스테이지의 적 스폰 지점·시작 속도·이미 배치된 적 수(`wavesSpawned`)로 새로 `Initialize`해서, 스테이지가 바뀔 때마다 카운트가 올바르게 리셋됩니다. `Update()`에서 `spawnInterval`(기본 30초)마다 적을 하나씩 추가로 만들고, 새로 스폰되는 적마다 속도가 빨라지며, 그 스테이지의 `maxEnemies`(적 수 + 3)에 도달하거나 `GameManager.IsGameOver`가 `true`가 되면 더 이상 스폰하지 않습니다.
 - **GameManager**: 싱글턴 패턴(`Instance`)으로 전역 접근을 제공합니다. 기본은 단일 스테이지 모드(씬에 미리 배치된 `CollectibleItem` 개수로 승리 판정)지만, `StageManager`가 있으면 `EnableMultiStageMode()`로 전환되어 코인을 다 모을 때마다 곧바로 승리 처리하는 대신 `OnStageCollected` 이벤트만 발생시키고 다음 처리는 `StageManager`에 맡깁니다. 매 프레임 `_elapsedTime`을 누적해 전체 플레이 시간(모든 스테이지 통틀어)을 추적합니다(제한시간 모드를 꺼도 계속 기록됨). `LoseGame()`은 `ShowWinMessage()`/`ShowTimeUpMessage()`와 동일한 종료 처리(재시작 버튼 노출, `Time.timeScale = 0f`)를 하되 "Game Over! An enemy caught you." 메시지를 보여주고, 최고 기록은 갱신하지 않습니다(승리한 게 아니므로).
