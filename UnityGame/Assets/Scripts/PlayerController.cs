@@ -46,23 +46,10 @@ public class PlayerController : MonoBehaviour
         _rb.interpolation = RigidbodyInterpolation.Interpolate;
 
         _animator = GetComponentInChildren<Animator>();
-        if (_animator != null && !HasFloatParameter(_animator, speedParameterName))
+        if (!AnimatorUtility.HasFloatParameter(_animator, speedParameterName))
         {
-            // Avoid spamming "parameter does not exist" warnings every frame
-            // when an imported character's Animator uses different names.
             _animator = null;
         }
-    }
-
-    private static bool HasFloatParameter(Animator animator, string paramName)
-    {
-        if (string.IsNullOrEmpty(paramName)) return false;
-
-        foreach (AnimatorControllerParameter param in animator.parameters)
-        {
-            if (param.type == AnimatorControllerParameterType.Float && param.name == paramName) return true;
-        }
-        return false;
     }
 
     private void Update()
