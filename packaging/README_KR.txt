@@ -57,4 +57,6 @@ Python 설치가 필요 없습니다. 압축을 원하는 폴더(예: C:\Tools\U
   "TFMonitor 창을 찾지 못함"       → exe 경로 / 창 제목(TFMonitor v1.x) 확인
   "실행 직후 종료됨 (exit code N)" → TFMonitor 를 직접 관리자 권한으로 실행해 정상인지 확인
   Start 후 값이 비어 있다는 경고   → UserScenarioCLI.exe tfmonitor --dump 출력 공유
+  YouTube 영상이 재생되지 않음    → 결과 폴더의 youtube_fail_*.png 와 run.log 의 '진단' 줄 확인
+                                    (봇 확인 화면이면 VPN/사내 프록시 IP 차단 가능성)
   Windows SmartScreen 경고         → "추가 정보" → "실행" (서명되지 않은 사내 배포 도구)
