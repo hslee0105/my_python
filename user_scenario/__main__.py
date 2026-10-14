@@ -4,6 +4,7 @@
   python -m user_scenario --gui                 # GUI Controller 실행
   python -m user_scenario --scenarios web_surfing youtube --gap 30   # 시나리오 사이 IDLE 30s
   python -m user_scenario --browser msedge --video-seconds 0         # Edge, 영상 끝까지 재생
+  python -m user_scenario --tfmon --tfmon-exe "C:\\Tools\\TFMonitor\\TFMonitor.exe"   # FAN/온도 로깅
 
 결과물 (results/<timestamp>/):
   phases.csv   : 페이즈별 시작/종료 시각 (외부 측정 로그와 align 용)
@@ -50,6 +51,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--no-monitor", action="store_true")
     p.add_argument("--allow-sleep", action="store_true", help="화면/시스템 슬립 방지 해제")
     p.add_argument("--seed", type=int, help="키워드 랜덤 시드 (재현성)")
+    g = p.add_argument_group("TFMonitor 연동 (FAN RPM / CPU 온도 로깅, Windows)")
+    g.add_argument("--tfmon", action="store_true", help="TFMonitor 연동 활성화")
+    g.add_argument("--tfmon-exe", help="TFMonitor.exe 경로 (창이 없으면 실행)")
+    g.add_argument("--tfmon-title", default=d.tfmon_title_re, help="TFMonitor 창 제목 정규식")
+    g.add_argument("--tfmon-backend", default=d.tfmon_backend, choices=["win32", "uia"])
+    g.add_argument("--tfmon-interval", type=float, default=d.tfmon_interval, help="샘플링 주기 [s]")
+    g.add_argument("--tfmon-no-stop", action="store_true", help="종료 시 [Stop] 클릭 안 함")
+    g.add_argument("--tfmon-close", action="store_true", help="직접 실행한 TFMonitor 를 종료 시 닫기")
     return p.parse_args(argv)
 
 
@@ -62,6 +71,9 @@ def config_from_args(a: argparse.Namespace) -> ScenarioConfig:
         mute=a.mute, browser_channel=a.browser_channel, browser_path=a.browser_path,
         headless=a.headless, output_dir=a.out, sample_interval=a.interval,
         enable_monitor=not a.no_monitor, keep_awake=not a.allow_sleep, seed=a.seed,
+        tfmon_enabled=a.tfmon, tfmon_exe=a.tfmon_exe, tfmon_title_re=a.tfmon_title,
+        tfmon_backend=a.tfmon_backend, tfmon_interval=a.tfmon_interval,
+        tfmon_click_stop=not a.tfmon_no_stop, tfmon_close=a.tfmon_close,
     )
     if a.keywords:
         cfg.naver_keywords = a.keywords
@@ -77,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         return gui_main()
 
     from .runner import run_scenario
+    from .tfmonitor import TFMonitorError
 
     add_log_handler(logging.StreamHandler(sys.stdout))
     try:
@@ -84,6 +97,9 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         logging.getLogger("scenario").warning("사용자 중단 (Ctrl+C)")
         return 130
+    except TFMonitorError as e:
+        logging.getLogger("scenario").error("%s → 시나리오를 시작하지 않았습니다", e)
+        return 1
     return 0
 
 

@@ -75,6 +75,15 @@ class ScenarioConfig:
     keep_awake: bool = True
     seed: int | None = None
 
+    # TFMonitor 연동: FAN0/FAN1 RPM, CPU(C0) 온도 로깅 → 시나리오별 그래프/통계 (Windows 전용)
+    tfmon_enabled: bool = False
+    tfmon_exe: str | None = None          # 창이 없으면 이 exe 실행
+    tfmon_title_re: str = r"^TFMonitor v\d"
+    tfmon_backend: str = "win32"          # win32 | uia
+    tfmon_interval: float = 1.0           # 샘플링 주기 [s]
+    tfmon_click_stop: bool = True         # 시나리오 종료 시 [Stop] 클릭
+    tfmon_close: bool = False             # 직접 실행한 TFMonitor 는 종료 시 닫기
+
     def planned_seconds(self, scenario: str) -> float | None:
         """시나리오 1회 예상 소요 시간 [s]. 영상 끝까지 재생 모드면 None(미정)."""
         if scenario == "idle":

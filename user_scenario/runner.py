@@ -102,8 +102,33 @@ def _write_video_stats(path: Path, rows: list) -> None:
             w.writerow({"loop": loop, **asdict(stat)})
 
 
+def _start_tfmonitor(cfg: ScenarioConfig, out: Path, recorder: PhaseRecorder, emit: EventCallback,
+                     client_factory=None):
+    from .tfmonitor import TFMonitorLogger, TFMonitorSettings, default_client_factory
+
+    settings = TFMonitorSettings(
+        exe_path=cfg.tfmon_exe, title_re=cfg.tfmon_title_re, backend=cfg.tfmon_backend,
+        interval=cfg.tfmon_interval, click_stop=cfg.tfmon_click_stop, close_on_finish=cfg.tfmon_close)
+    logger = TFMonitorLogger(settings, out / "fan.csv", lambda: recorder.current,
+                             on_sample=lambda row: emit({"event": "fan", **row}),
+                             client_factory=client_factory or default_client_factory)
+    log.info("TFMonitor 연동 시작 (Start 클릭 → FAN/온도 로깅)")
+    logger.start_and_wait()
+    return logger
+
+
+def _run_fan_analysis(out: Path, emit: EventCallback) -> None:
+    try:
+        from .fan_analysis import analyze
+        paths = analyze(out)
+        log.info("FAN/온도 분석 완료: %s", ", ".join(p.name for p in paths if p.parent == out))
+        emit({"event": "analysis", "paths": paths})
+    except Exception as e:
+        log.warning("FAN/온도 분석 실패: %r", e)
+
+
 def run_scenario(cfg: ScenarioConfig, stop_event: threading.Event | None = None,
-                 on_event: EventCallback | None = None) -> Path:
+                 on_event: EventCallback | None = None, tfmon_client_factory=None) -> Path:
     """시나리오 실행. 결과 디렉터리 경로를 반환."""
     stop = stop_event or threading.Event()
     emit = on_event or (lambda e: None)
@@ -124,10 +149,14 @@ def run_scenario(cfg: ScenarioConfig, stop_event: threading.Event | None = None,
     monitor = ResourceMonitor(out / "resource.csv", recorder, cfg.sample_interval) if cfg.enable_monitor else None
     video_rows: list = []
     error: BaseException | None = None
+    tf_logger = None
 
     if monitor:
         monitor.start()
     try:
+        if cfg.tfmon_enabled:
+            # 연결 실패 시 시나리오를 시작하지 않음 (FAN 데이터 없는 측정 방지)
+            tf_logger = _start_tfmonitor(cfg, out, recorder, emit, tfmon_client_factory)
         with keep_awake(cfg.keep_awake), sync_playwright() as pw:
             browser = _Browser(pw, cfg)
             try:
@@ -158,10 +187,14 @@ def run_scenario(cfg: ScenarioConfig, stop_event: threading.Event | None = None,
         error = e
         raise
     finally:
+        if tf_logger:
+            tf_logger.stop()
         if monitor:
             monitor.stop()
         recorder.close()
         _write_video_stats(out / "youtube.csv", video_rows)
+        if tf_logger and tf_logger.samples:
+            _run_fan_analysis(out, emit)
         if stop.is_set():
             log.warning("사용자 요청으로 시나리오 중단")
         log.info("시나리오 종료. 결과: %s", out.resolve())

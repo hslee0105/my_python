@@ -13,6 +13,7 @@
 ```bash
 pip install -r user_scenario/requirements.txt
 playwright install chromium   # --browser msedge / chrome 사용 시 생략 가능
+# (Windows에서는 pywinauto가 함께 설치되어 TFMonitor 연동에 사용됩니다)
 ```
 
 ## 실행
@@ -57,6 +58,55 @@ python -m user_scenario --gui
 - 설정은 `~/.user_scenario_gui.json`에 자동 저장되어 다음 실행 때 복원됩니다.
 
 중지 버튼을 누르면 IDLE은 즉시, 브라우저 동작은 진행 중인 단일 동작(최대 Playwright timeout 15 s)이 끝나는 대로 멈추고 그때까지의 결과 파일을 정리합니다.
+
+## TFMonitor 연동 (FAN RPM · CPU 온도 로깅, Windows)
+
+시나리오 시작 시 TFMonitor를 실행(이미 떠 있으면 연결)하고 **[Start]**를 클릭한 뒤, 시나리오가 끝날 때까지 아래 값을 주기적으로 읽어 기록합니다. 종료 시 **[Stop]**을 클릭하고 시나리오별 그래프와 통계를 생성합니다.
+
+| CSV 컬럼 | TFMonitor 위치 |
+|---|---|
+| `fan0_rpm` | FAN Status › FAN 0 RPM |
+| `fan1_rpm` | FAN Status › FAN 1 RPM |
+| `cpu_temp_c` | Micom Data › C0 (CPU) › **Dec** |
+
+```bash
+# GUI: "5. TFMonitor 연동"에서 사용 체크 + TFMonitor.exe 경로 지정 → [연결 테스트]로 값 매핑 확인
+python -m user_scenario --gui
+
+# CLI
+python -m user_scenario --tfmon --tfmon-exe "C:\Tools\TFMonitor\TFMonitor.exe" --tfmon-interval 1
+
+# 분석만 다시 실행
+python -m user_scenario.fan_analysis results/20261014_120000
+
+# 진단: 컨트롤 목록 출력 / 값 1회 읽기
+python -m user_scenario.tfmonitor --dump
+python -m user_scenario.tfmonitor --read
+```
+
+- 텍스트박스에 이름이 없는 WinForms/MFC 앱이라도 동작하도록, **라벨 텍스트 + 같은 행 좌표**로 값 칸을 찾습니다(예: `C0 (CPU)` 행의 두 번째 칸 = Dec). 레이아웃이 다른 버전이면 `tfmonitor.py`의 `FIELDS`를 수정하세요.
+- 버튼은 `BM_CLICK` 메시지로 누르므로 마우스/포커스를 빼앗지 않습니다(브라우저 시나리오에 영향 없음).
+- TFMonitor가 **관리자 권한**으로 실행되면(EC/드라이버 접근 툴은 대부분 그렇습니다) Windows UIPI 때문에 일반 권한 Python에서는 버튼 클릭/값 읽기가 막힙니다. **명령 프롬프트(또는 GUI)를 관리자 권한으로 실행**하세요.
+- 연결에 실패하면 시나리오를 시작하지 않습니다(FAN 데이터 없는 측정 방지).
+- 창 제목은 기본 `^TFMonitor v\d`(예: `TFMonitor v1.21.0.0`)로 찾습니다. 같은 이름의 탐색기 폴더 창에 잘못 붙지 않도록 버전 표기까지 매칭합니다.
+
+### FAN 분석 결과물
+
+- `fan.csv` — 샘플별 시각, 페이즈, FAN0/FAN1 RPM, CPU 온도
+- `fan_timeline.png` — 전체 시간축 꺾은선 (위: FAN0/FAN1 RPM, 아래: CPU 온도). 시나리오 구간은 회색 음영과 이름으로 표시
+- `fan_phases/NN_<시나리오>_loopK.png` — 시나리오 실행 1회별 꺾은선 (x = 시나리오 시작 후 경과 시간)
+- `fan_summary.png` — 시나리오 종류별 평균(막대)과 최대(선 끝 점) RPM/온도 비교
+- `fan_summary.csv` — 시나리오 실행 1회별 통계, `fan_summary_by_scenario.csv` — 시나리오 종류별 집계 (Excel에서 한글이 깨지지 않도록 UTF-8 BOM)
+
+| 통계 컬럼 | 의미 |
+|---|---|
+| `*_avg / min / max / p95 / std` | 평균 / 최소 / 최대 / 95퍼센타일 / 표준편차 |
+| `*_start / *_end` | 시나리오 시작·종료 시점 값 (램프업·쿨다운 확인) |
+| `fanN_rpm_on_ratio_pct` | RPM > 0 인 샘플 비율 (팬 동작 비율, 0 RPM 팬 정지 정책 확인) |
+| `fanN_rpm_level_changes` | RPM 값이 바뀐 횟수 (팬 hunting/소음 변동 지표) |
+| `cpu_temp_c_delta` | 시나리오 동안 온도 변화 (끝 − 시작) |
+
+RPM과 온도는 단위가 달라 이중 Y축 대신 위아래 두 패널로 나눴습니다. 샘플은 `phases.csv`의 시작/종료 epoch 기준으로 시나리오에 배정됩니다.
 
 ## 결과물 (`results/<YYYYMMDD_HHMMSS>/`)
 
