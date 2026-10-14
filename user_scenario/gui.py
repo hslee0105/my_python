@@ -26,6 +26,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
+from . import __version__
 from .config import NAVER_KEYWORDS, QUALITIES, SCENARIOS, YOUTUBE_QUERIES, ScenarioConfig
 from .runner import Step, build_plan, planned_total, run_scenario
 from .tfmonitor import DEFAULT_TITLE_RE, FIELDS, TFMonitorSettings, default_client_factory, parse_number
@@ -85,7 +86,8 @@ class ScenarioRow:
 class ControllerApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("User Scenario Controller" + (" [관리자]" if sys.platform == "win32" and is_admin() else ""))
+        self.title(f"User Scenario Controller v{__version__}"
+                   + (" [관리자]" if sys.platform == "win32" and is_admin() else ""))
         self.minsize(1100, 700)
         style = ttk.Style(self)
         for theme in ("vista", "clam"):
@@ -599,7 +601,7 @@ class ControllerApp(tk.Tk):
             return
         self._save_settings()
         try:
-            relaunch_as_admin(["-m", "user_scenario", "--gui"])
+            relaunch_as_admin(["--gui"])
         except OSError as e:
             messagebox.showerror("관리자 권한", str(e))
             return

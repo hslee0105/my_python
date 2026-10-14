@@ -8,7 +8,20 @@
 | 2. `web_surfing` | 네이버 메인 → 랜덤 키워드 타이핑/검색 → 휠 스크롤 → 확률적으로 결과 링크 클릭 → 반복 | 60 s |
 | 3. `youtube` | YouTube 검색어/URL로 영상 3개 순차 재생 (광고 스킵, 화질 고정) | 영상당 60 s |
 
-## 설치
+## 배포판 (Windows exe, Python 불필요)
+
+[Releases](https://github.com/hslee0105/my_python/releases)에서 `UserScenario-vX.Y.Z-win64.zip`을 받아 압축을 풀고 `UserScenario.exe`(GUI) 또는 `UserScenarioCLI.exe`(명령줄)를 실행합니다. 사용법은 zip 안의 `README_KR.txt`를 참고하세요.
+
+빌드는 `.github/workflows/build-windows.yml`이 Windows 러너에서 수행합니다 (PyInstaller → 스모크 테스트 → zip → 버전 태그가 없으면 Release 생성). 새 버전 배포는 `user_scenario/__init__.py`의 `__version__`을 올려 push하면 됩니다.
+
+```bat
+:: 로컬 빌드 (Windows)
+pip install -r packaging\requirements-build.txt
+pyinstaller packaging\user_scenario.spec --noconfirm --clean
+:: → dist\UserScenario\
+```
+
+## 설치 (소스 실행)
 
 ```bash
 pip install -r user_scenario/requirements.txt

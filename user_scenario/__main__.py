@@ -20,6 +20,7 @@ import logging
 import sys
 from pathlib import Path
 
+from . import __version__
 from .config import QUALITIES, SCENARIOS, ScenarioConfig
 from .utils import add_log_handler, is_admin, relaunch_as_admin
 
@@ -27,6 +28,7 @@ from .utils import add_log_handler, is_admin, relaunch_as_admin
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     d = ScenarioConfig()
     p = argparse.ArgumentParser(prog="user_scenario", description="Laptop 사용자 시나리오 자동화")
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     p.add_argument("--gui", action="store_true", help="GUI Controller 실행")
     p.add_argument("--scenarios", nargs="+", choices=list(SCENARIOS), default=d.scenarios,
                    help="실행할 시나리오와 순서")
@@ -92,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     a = parse_args(argv)
     needs_admin = a.gui or (a.tfmon and not a.tfmon_no_admin)
     if a.elevate and needs_admin and not is_admin():
-        args = ["-m", "user_scenario", *[x for x in argv if x != "--elevate"]]
+        args = [x for x in argv if x != "--elevate"]
         try:
             relaunch_as_admin(args if a.gui else [*args, "--pause"])
         except OSError as e:

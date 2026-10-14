@@ -148,8 +148,11 @@ def keep_awake(enabled: bool = True) -> Iterator[None]:
 
 
 # --------------------------------------------------------------------------- Windows 권한(UAC)
-# 패키지 상위 폴더 (관리자 권한 재실행 시 `python -m user_scenario` 가 동작하도록 작업 폴더로 사용)
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# PyInstaller 로 빌드된 실행 파일(exe)로 실행 중인지
+FROZEN = bool(getattr(sys, "frozen", False))
+# 관리자 권한 재실행 시 작업 폴더: 소스 실행이면 패키지 상위 폴더(`python -m user_scenario` 동작),
+# exe 실행이면 exe 가 있는 폴더 (results/ 가 같은 위치에 생성되도록)
+PROJECT_ROOT = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 
 ADMIN_HINT = ("관리자 권한으로 실행된 명령 프롬프트에서 다시 실행하거나, "
               "GUI 에서 '관리자 권한으로 다시 실행'을 선택하세요")
@@ -166,15 +169,17 @@ def is_admin() -> bool:
 
 
 def relaunch_as_admin(args: list[str]) -> None:
-    """ShellExecute 'runas' 로 같은 Python 인터프리터를 관리자 권한으로 재실행 (UAC 프롬프트).
+    """ShellExecute 'runas' 로 현재 프로그램을 관리자 권한으로 재실행 (UAC 프롬프트).
 
-    args 예: ["-m", "user_scenario", "--gui"]. 실패/UAC 거부 시 OSError.
+    args 는 프로그램 인자 (예: ["--gui"]). 소스 실행이면 `python -m user_scenario <args>`,
+    exe 실행이면 `<현재 exe> <args>` 로 재실행한다. 실패/UAC 거부 시 OSError.
     """
     import subprocess
 
+    params = list(args) if FROZEN else ["-m", "user_scenario", *args]
     shell32 = ctypes.windll.shell32
     shell32.ShellExecuteW.restype = ctypes.c_void_p
-    r = shell32.ShellExecuteW(None, "runas", sys.executable, subprocess.list2cmdline(args),
+    r = shell32.ShellExecuteW(None, "runas", sys.executable, subprocess.list2cmdline(params),
                               str(PROJECT_ROOT), 1) or 0
     if r <= 32:  # ShellExecute 는 32 이하를 오류 코드로 반환 (5 = 접근 거부/UAC 취소)
         reason = "UAC 승인이 거부됨" if r == 5 else f"오류 코드 {r}"

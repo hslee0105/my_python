@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 results/
 .venv/
+build/
+dist/
+*.zip
