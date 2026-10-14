@@ -50,6 +50,9 @@ JS_STATUS = """() => {
     totalFrames: q.totalVideoFrames || 0, droppedFrames: q.droppedVideoFrames || 0,
     quality: p && p.getPlaybackQuality ? p.getPlaybackQuality() : '',
     title: document.title.replace(/ - YouTube$/, ''),
+    // 플레이어 내부 오류 화면 (봇 확인/재생 불가 등은 <video> 가 있어도 이 오버레이로 표시됨)
+    error: (() => { const e = p && p.querySelector('.ytp-error');
+                    return e && e.offsetParent !== null ? (e.innerText || 'player error').trim().slice(0, 300) : ''; })(),
   };
 }"""
 
@@ -150,8 +153,10 @@ class YouTubePhase:
         quality_set = False
         last_t, last_progress = -1.0, time.monotonic()
         started = time.monotonic()
-        content_s = 0.0
+        content_s = 0.0  # 본편 실제 재생 시간 = currentTime 증가량 합 (멈춘 시간은 제외)
+        prev_ct: float | None = None
         prev_tick = time.monotonic()
+        stalls = 0
         base_frames = None  # 광고 구간 프레임은 제외하기 위해 본편 시작 시점 기준값 저장
         s = None
 
@@ -165,6 +170,14 @@ class YouTubePhase:
                     return
                 continue
 
+            if s.get("error"):
+                reason = self._diagnose(page, stat.index, "player")
+                if reason == "원인 미상":
+                    reason = f"플레이어 오류: {s['error'][:80]}"
+                stat.status = f"error: {reason}"
+                break
+
+            ct = s["currentTime"] or 0.0
             if s["ad"]:
                 stat.ad_s += dt
                 self._skip_ad(page)
@@ -173,8 +186,10 @@ class YouTubePhase:
                     base_frames = (s["totalFrames"], s["droppedFrames"])
                 if not quality_set and self.quality != "auto":
                     quality_set = bool(page.evaluate(JS_SET_QUALITY, self.quality))
-                if not s["paused"]:
-                    content_s += dt
+                # 실제로 재생된 만큼만 누적 (seek/새로고침에 의한 점프는 제외, 최대 2배속 허용)
+                if prev_ct is not None and 0 < ct - prev_ct <= dt * 2 + 0.5:
+                    content_s += ct - prev_ct
+            prev_ct = ct
 
             page.evaluate(JS_PLAY, self.mute)  # autoplay 차단/일시정지 대비
 
@@ -182,9 +197,15 @@ class YouTubePhase:
             if abs(s["currentTime"] - last_t) > 0.05:
                 last_t, last_progress = s["currentTime"], now
             elif now - last_progress > 15:
+                stalls += 1
+                if stalls >= 2:  # 새로고침 후에도 재생이 진행되지 않음 → 실패 처리
+                    reason = self._diagnose(page, stat.index, "stall")
+                    stat.status = f"stalled: {reason}"
+                    break
                 log.warning("재생 정지(stall) 감지 → 새로고침")
                 page.reload(wait_until="domcontentloaded")
-                last_progress = now
+                self._dismiss_consent(page)
+                last_progress, prev_ct = now, None
 
             if not s["ad"]:
                 if s["ended"]:
@@ -228,7 +249,7 @@ class YouTubePhase:
                     self._dismiss_consent(page)
         raise RuntimeError(f"<video> 요소 없음 - {reason}")
 
-    def _diagnose(self, page: Page, index: int, attempt: int) -> str:
+    def _diagnose(self, page: Page, index: int, attempt: int | str) -> str:
         try:
             title = page.title()
             body = (page.inner_text("body", timeout=3_000) or "").lower()
