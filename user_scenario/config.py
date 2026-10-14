@@ -83,6 +83,7 @@ class ScenarioConfig:
     tfmon_interval: float = 1.0           # 샘플링 주기 [s]
     tfmon_click_stop: bool = True         # 시나리오 종료 시 [Stop] 클릭
     tfmon_close: bool = False             # 직접 실행한 TFMonitor 는 종료 시 닫기
+    tfmon_require_admin: bool = True      # 이 프로그램이 관리자 권한이 아니면 연동 중단 (UIPI 대비)
 
     def planned_seconds(self, scenario: str) -> float | None:
         """시나리오 1회 예상 소요 시간 [s]. 영상 끝까지 재생 모드면 None(미정)."""

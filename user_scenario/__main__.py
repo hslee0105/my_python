@@ -4,7 +4,7 @@
   python -m user_scenario --gui                 # GUI Controller 실행
   python -m user_scenario --scenarios web_surfing youtube --gap 30   # 시나리오 사이 IDLE 30s
   python -m user_scenario --browser msedge --video-seconds 0         # Edge, 영상 끝까지 재생
-  python -m user_scenario --tfmon --tfmon-exe "C:\\Tools\\TFMonitor\\TFMonitor.exe"   # FAN/온도 로깅
+  python -m user_scenario --elevate --tfmon --tfmon-exe "C:\\Tools\\TFMonitor\\TFMonitor.exe"   # FAN/온도 로깅
 
 결과물 (results/<timestamp>/):
   phases.csv   : 페이즈별 시작/종료 시각 (외부 측정 로그와 align 용)
@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 from .config import QUALITIES, SCENARIOS, ScenarioConfig
-from .utils import add_log_handler
+from .utils import add_log_handler, is_admin, relaunch_as_admin
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -59,6 +59,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     g.add_argument("--tfmon-interval", type=float, default=d.tfmon_interval, help="샘플링 주기 [s]")
     g.add_argument("--tfmon-no-stop", action="store_true", help="종료 시 [Stop] 클릭 안 함")
     g.add_argument("--tfmon-close", action="store_true", help="직접 실행한 TFMonitor 를 종료 시 닫기")
+    g.add_argument("--tfmon-no-admin", action="store_true",
+                   help="관리자 권한 확인 생략 (TFMonitor 가 일반 권한으로 동작하는 경우만)")
+    p.add_argument("--elevate", action="store_true", help="관리자 권한이 아니면 UAC 로 관리자 권한 재실행")
+    p.add_argument("--pause", action="store_true", help=argparse.SUPPRESS)  # 재실행 창이 바로 닫히지 않도록
     return p.parse_args(argv)
 
 
@@ -74,6 +78,7 @@ def config_from_args(a: argparse.Namespace) -> ScenarioConfig:
         tfmon_enabled=a.tfmon, tfmon_exe=a.tfmon_exe, tfmon_title_re=a.tfmon_title,
         tfmon_backend=a.tfmon_backend, tfmon_interval=a.tfmon_interval,
         tfmon_click_stop=not a.tfmon_no_stop, tfmon_close=a.tfmon_close,
+        tfmon_require_admin=not a.tfmon_no_admin,
     )
     if a.keywords:
         cfg.naver_keywords = a.keywords
@@ -83,7 +88,18 @@ def config_from_args(a: argparse.Namespace) -> ScenarioConfig:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
     a = parse_args(argv)
+    needs_admin = a.gui or (a.tfmon and not a.tfmon_no_admin)
+    if a.elevate and needs_admin and not is_admin():
+        args = ["-m", "user_scenario", *[x for x in argv if x != "--elevate"]]
+        try:
+            relaunch_as_admin(args if a.gui else [*args, "--pause"])
+        except OSError as e:
+            print(e)
+            return 1
+        print("관리자 권한 창에서 다시 실행합니다.")
+        return 0
     if a.gui:
         from .gui import main as gui_main
         return gui_main()
@@ -99,7 +115,12 @@ def main(argv: list[str] | None = None) -> int:
         return 130
     except TFMonitorError as e:
         logging.getLogger("scenario").error("%s → 시나리오를 시작하지 않았습니다", e)
+        if not is_admin():
+            print("\n  → 'python -m user_scenario --elevate ...' 로 관리자 권한 재실행할 수 있습니다.")
         return 1
+    finally:
+        if a.pause:
+            input("\nEnter 키를 누르면 창이 닫힙니다...")
     return 0
 
 

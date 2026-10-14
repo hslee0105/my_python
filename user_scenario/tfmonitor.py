@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import csv
 import logging
-import os
 import re
 import sys
 import threading
@@ -30,6 +29,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
+
+from .utils import ADMIN_HINT, is_admin, process_elevated
 
 log = logging.getLogger("scenario.tfmonitor")
 
@@ -123,7 +124,7 @@ def find_row_edits(ctrls: list[_Ctrl], spec: FieldSpec) -> _Ctrl:
 
 class TFMonitorClient:
     def __init__(self, exe_path: str | None = None, title_re: str = DEFAULT_TITLE_RE,
-                 backend: str = "win32", timeout: float = 30.0) -> None:
+                 backend: str = "win32", timeout: float = 30.0, require_admin: bool = True) -> None:
         if sys.platform != "win32":
             raise TFMonitorError("TFMonitor 연동은 Windows 에서만 지원됩니다")
         import importlib.util
@@ -133,6 +134,8 @@ class TFMonitorClient:
         self.title_re = title_re
         self.backend = backend
         self.timeout = timeout
+        self.require_admin = require_admin
+        self.proc = None
         self.app = None
         self.win = None
         self.launched = False
@@ -140,25 +143,45 @@ class TFMonitorClient:
 
     # ---------------------------------------------------------------- connect
     def connect(self, launch: bool = True) -> None:
-        from pywinauto import Application
-        from pywinauto.findwindows import ElementNotFoundError
+        """실행 중인 TFMonitor 에 연결, 없으면 exe 실행 후 연결.
 
+        권한 모델: TFMonitor 는 EC/센서 드라이버 접근 때문에 관리자 권한이 필요한 경우가 대부분이고,
+        Windows UIPI 는 일반 권한 프로세스가 관리자 권한 창에 보내는 클릭/WM_GETTEXT 메시지를
+        '오류 없이 조용히' 버린다. 따라서 이 프로그램을 관리자 권한으로 실행하고, TFMonitor 는
+        그 권한을 상속받도록 직접 실행(CreateProcess)하는 방식만 확실히 동작한다.
+        """
+        from pywinauto import Application
+
+        if self.require_admin and not is_admin():
+            raise TFMonitorError(
+                "TFMonitor 연동에는 관리자 권한이 필요합니다 (TFMonitor 의 EC/센서 접근 + Windows UIPI). "
+                + ADMIN_HINT)
         try:
+            # pywinauto 는 timeout 지정 시 창이 없으면 ElementNotFoundError 가 아니라
+            # timings.TimeoutError 를 던지므로 모든 예외를 '창 없음'으로 처리
             self.app = Application(backend=self.backend).connect(title_re=self.title_re, found_index=0, timeout=1)
             log.info("실행 중인 TFMonitor 에 연결")
-        except ElementNotFoundError:
+        except Exception:
             if not (launch and self.exe_path):
                 raise TFMonitorError(
-                    f"TFMonitor 창(title~'{self.title_re}')을 찾지 못함 - 먼저 실행하거나 exe 경로를 지정하세요"
+                    f"TFMonitor 창(제목 ~ '{self.title_re}')을 찾지 못함 - 먼저 실행하거나 exe 경로를 지정하세요"
                 ) from None
             self._launch()
-            self.app = Application(backend=self.backend).connect(title_re=self.title_re, found_index=0,
-                                                                 timeout=self.timeout)
+            try:
+                self.app = Application(backend=self.backend).connect(title_re=self.title_re, found_index=0,
+                                                                     timeout=self.timeout)
+            except Exception:
+                self._raise_if_exited()
+                raise TFMonitorError(
+                    f"TFMonitor 를 실행했지만 {self.timeout:.0f}초 안에 창(제목 ~ '{self.title_re}')이 "
+                    "나타나지 않음 - 오류 창이 떴는지, 창 제목 정규식이 맞는지 확인하세요") from None
             self.launched = True
         spec = self.app.window(title_re=self.title_re, found_index=0)
         spec.wait("visible", timeout=self.timeout)
         self.win = spec.wrapper_object()
-        log.info("TFMonitor 창: '%s'", self.win.window_text())
+        log.info("TFMonitor 창: '%s' (pid %s, 이 프로그램 관리자 권한: %s)",
+                 self.win.window_text(), self.app.process, "예" if is_admin() else "아니오")
+        self._check_integrity()
 
     def _launch(self) -> None:
         path = Path(self.exe_path)
@@ -167,15 +190,31 @@ class TFMonitorClient:
         log.info("TFMonitor 실행: %s", path)
         import subprocess
         try:
-            # 설정/드라이버 파일을 상대 경로로 읽는 툴이 많으므로 작업 폴더를 exe 위치로 지정
-            subprocess.Popen([str(path)], cwd=str(path.parent))
+            # - 이 프로그램이 관리자 권한이면 자식 프로세스도 관리자 권한으로 실행됨 (UAC 프롬프트 없음)
+            # - 설정/드라이버 파일을 상대 경로로 읽는 툴이 많으므로 작업 폴더를 exe 위치로 지정
+            self.proc = subprocess.Popen([str(path)], cwd=str(path.parent))
         except OSError as e:
-            if getattr(e, "winerror", None) == 740:  # ERROR_ELEVATION_REQUIRED
-                log.warning("TFMonitor 가 관리자 권한을 요구 → UAC 승인 후 실행 "
-                            "(값 읽기/버튼 클릭을 위해 이 프로그램도 관리자 권한으로 실행 권장)")
-                os.startfile(str(path))  # noqa: S606 - ShellExecute 로 UAC 프롬프트
-            else:
-                raise
+            if getattr(e, "winerror", None) == 740:  # ERROR_ELEVATION_REQUIRED (manifest=requireAdministrator)
+                # UAC 로 TFMonitor 만 따로 올려 실행하면 UIPI 때문에 클릭/값 읽기가 막히므로 실행하지 않음
+                raise TFMonitorError("TFMonitor 가 관리자 권한을 요구합니다. " + ADMIN_HINT) from None
+            raise TFMonitorError(f"TFMonitor 실행 실패: {e}") from None
+        # 권한 부족(드라이버 로드 실패), 작업 폴더 문제 등으로 바로 종료되는지 확인
+        time.sleep(2.0)
+        self._raise_if_exited()
+
+    def _raise_if_exited(self) -> None:
+        if self.proc is not None and (rc := self.proc.poll()) is not None:
+            hint = "" if is_admin() else " / " + ADMIN_HINT
+            raise TFMonitorError(f"TFMonitor 가 실행 직후 종료됨 (exit code {rc}) - 드라이버/권한 문제 가능{hint}")
+
+    def _check_integrity(self) -> None:
+        """일반 권한 ↔ 관리자 권한 TFMonitor 조합이면 UIPI 로 조작이 막히므로 미리 차단."""
+        if is_admin():
+            return
+        if process_elevated(self.app.process):
+            raise TFMonitorError(
+                "TFMonitor 는 관리자 권한으로 실행 중인데 이 프로그램은 일반 권한입니다. "
+                "이 상태에서는 Windows UIPI 때문에 Start 클릭과 값 읽기가 '오류 없이' 무시됩니다. " + ADMIN_HINT)
 
     def snapshot(self) -> list[_Ctrl]:
         out = []
@@ -195,7 +234,7 @@ class TFMonitorClient:
         if not btns:
             raise TFMonitorError(f"'{caption}' 버튼을 찾지 못함")
         w = btns[0].wrapper
-        # win32: BM_CLICK 메시지 → 포커스/마우스 이동 없이 클릭 (브라우저 포커스 유지)
+        # win32: 버튼 창에 WM_LBUTTONDOWN/UP 메시지 전송 → 실제 마우스 이동/포커스 변경 없이 클릭
         if hasattr(w, "invoke") and self.backend == "uia":
             w.invoke()
         else:
@@ -245,13 +284,14 @@ class TFMonitorSettings:
     click_start: bool = True
     click_stop: bool = True
     close_on_finish: bool = False  # 이 프로그램이 직접 실행한 경우에만 종료
+    require_admin: bool = True     # 관리자 권한이 아니면 연결 전에 중단
 
 
 ClientFactory = Callable[[TFMonitorSettings], Any]
 
 
 def default_client_factory(s: TFMonitorSettings) -> TFMonitorClient:
-    return TFMonitorClient(s.exe_path, s.title_re, s.backend)
+    return TFMonitorClient(s.exe_path, s.title_re, s.backend, require_admin=s.require_admin)
 
 
 class TFMonitorLogger(threading.Thread):
@@ -289,6 +329,18 @@ class TFMonitorLogger(threading.Thread):
         self._stop_evt.set()
         self.join(timeout=15)
 
+    def _wait_first_values(self, client, timeout: float = 10.0) -> None:
+        """Start 후 값이 채워지는지 확인 - 비어 있으면 Start 미동작/권한 문제를 경고."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end and not self._stop_evt.is_set():
+            vals = client.read()
+            if any(v is not None for v in vals.values()):
+                log.info("TFMonitor 첫 값: %s", vals)
+                return
+            self._stop_evt.wait(0.5)
+        log.warning("TFMonitor Start 후 %.0f초 동안 값이 비어 있음 - Start 가 눌리지 않았거나 "
+                    "권한(UIPI) 문제일 수 있습니다. 로깅은 계속합니다", timeout)
+
     def run(self) -> None:
         _com_init()
         client = None
@@ -299,6 +351,7 @@ class TFMonitorLogger(threading.Thread):
                 client.press("Start")
             client.resolve()
             log.info("TFMonitor 값 칸 매핑 완료: %s", ", ".join(FIELDS))
+            self._wait_first_values(client)
         except BaseException as e:
             self.error = e
             self.ready.set()

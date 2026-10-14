@@ -145,3 +145,71 @@ def keep_awake(enabled: bool = True) -> Iterator[None]:
         yield
     finally:
         kernel32.SetThreadExecutionState(_ES_CONTINUOUS)
+
+
+# --------------------------------------------------------------------------- Windows 권한(UAC)
+# 패키지 상위 폴더 (관리자 권한 재실행 시 `python -m user_scenario` 가 동작하도록 작업 폴더로 사용)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+ADMIN_HINT = ("관리자 권한으로 실행된 명령 프롬프트에서 다시 실행하거나, "
+              "GUI 에서 '관리자 권한으로 다시 실행'을 선택하세요")
+
+
+def is_admin() -> bool:
+    """현재 프로세스가 관리자(elevated) 권한인지. Windows 외에는 항상 True."""
+    if sys.platform != "win32":
+        return True
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def relaunch_as_admin(args: list[str]) -> None:
+    """ShellExecute 'runas' 로 같은 Python 인터프리터를 관리자 권한으로 재실행 (UAC 프롬프트).
+
+    args 예: ["-m", "user_scenario", "--gui"]. 실패/UAC 거부 시 OSError.
+    """
+    import subprocess
+
+    shell32 = ctypes.windll.shell32
+    shell32.ShellExecuteW.restype = ctypes.c_void_p
+    r = shell32.ShellExecuteW(None, "runas", sys.executable, subprocess.list2cmdline(args),
+                              str(PROJECT_ROOT), 1) or 0
+    if r <= 32:  # ShellExecute 는 32 이하를 오류 코드로 반환 (5 = 접근 거부/UAC 취소)
+        reason = "UAC 승인이 거부됨" if r == 5 else f"오류 코드 {r}"
+        raise OSError(f"관리자 권한으로 다시 실행하지 못했습니다 ({reason})")
+
+
+def process_elevated(pid: int) -> bool | None:
+    """대상 프로세스가 관리자(elevated) 권한인지. 판단 불가 시 None."""
+    if sys.platform != "win32":
+        return None
+    from ctypes import wintypes
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    adv = ctypes.WinDLL("advapi32", use_last_error=True)
+    k32.OpenProcess.restype = wintypes.HANDLE
+    k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    adv.OpenProcessToken.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE)]
+    adv.GetTokenInformation.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+                                        ctypes.POINTER(wintypes.DWORD)]
+    PROCESS_QUERY_LIMITED_INFORMATION, TOKEN_QUERY, TOKEN_ELEVATION = 0x1000, 0x0008, 20
+
+    hproc = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not hproc:
+        return None
+    token = wintypes.HANDLE()
+    try:
+        if not adv.OpenProcessToken(hproc, TOKEN_QUERY, ctypes.byref(token)):
+            # 일반 권한에서 관리자 프로세스 토큰은 열 수 없음 → 접근 거부면 elevated 로 판단
+            return True if ctypes.get_last_error() == 5 else None
+        elevation, size = wintypes.DWORD(), wintypes.DWORD()
+        if not adv.GetTokenInformation(token, TOKEN_ELEVATION, ctypes.byref(elevation),
+                                       ctypes.sizeof(elevation), ctypes.byref(size)):
+            return None
+        return bool(elevation.value)
+    finally:
+        if token:
+            k32.CloseHandle(token)
+        k32.CloseHandle(hproc)

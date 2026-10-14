@@ -108,7 +108,8 @@ def _start_tfmonitor(cfg: ScenarioConfig, out: Path, recorder: PhaseRecorder, em
 
     settings = TFMonitorSettings(
         exe_path=cfg.tfmon_exe, title_re=cfg.tfmon_title_re, backend=cfg.tfmon_backend,
-        interval=cfg.tfmon_interval, click_stop=cfg.tfmon_click_stop, close_on_finish=cfg.tfmon_close)
+        interval=cfg.tfmon_interval, click_stop=cfg.tfmon_click_stop, close_on_finish=cfg.tfmon_close,
+        require_admin=cfg.tfmon_require_admin)
     logger = TFMonitorLogger(settings, out / "fan.csv", lambda: recorder.current,
                              on_sample=lambda row: emit({"event": "fan", **row}),
                              client_factory=client_factory or default_client_factory)

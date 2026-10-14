@@ -73,8 +73,8 @@ python -m user_scenario --gui
 # GUI: "5. TFMonitor 연동"에서 사용 체크 + TFMonitor.exe 경로 지정 → [연결 테스트]로 값 매핑 확인
 python -m user_scenario --gui
 
-# CLI
-python -m user_scenario --tfmon --tfmon-exe "C:\Tools\TFMonitor\TFMonitor.exe" --tfmon-interval 1
+# CLI (--elevate: 관리자 권한이 아니면 UAC 승인 후 새 창에서 관리자 권한으로 재실행)
+python -m user_scenario --elevate --tfmon --tfmon-exe "C:\Tools\TFMonitor\TFMonitor.exe" --tfmon-interval 1
 
 # 분석만 다시 실행
 python -m user_scenario.fan_analysis results/20261014_120000
@@ -85,10 +85,30 @@ python -m user_scenario.tfmonitor --read
 ```
 
 - 텍스트박스에 이름이 없는 WinForms/MFC 앱이라도 동작하도록, **라벨 텍스트 + 같은 행 좌표**로 값 칸을 찾습니다(예: `C0 (CPU)` 행의 두 번째 칸 = Dec). 레이아웃이 다른 버전이면 `tfmonitor.py`의 `FIELDS`를 수정하세요.
-- 버튼은 `BM_CLICK` 메시지로 누르므로 마우스/포커스를 빼앗지 않습니다(브라우저 시나리오에 영향 없음).
-- TFMonitor가 **관리자 권한**으로 실행되면(EC/드라이버 접근 툴은 대부분 그렇습니다) Windows UIPI 때문에 일반 권한 Python에서는 버튼 클릭/값 읽기가 막힙니다. **명령 프롬프트(또는 GUI)를 관리자 권한으로 실행**하세요.
+- 버튼은 창 메시지(WM_LBUTTONDOWN/UP)로 누르므로 실제 마우스/포커스를 빼앗지 않습니다(브라우저 시나리오에 영향 없음).
 - 연결에 실패하면 시나리오를 시작하지 않습니다(FAN 데이터 없는 측정 방지).
 - 창 제목은 기본 `^TFMonitor v\d`(예: `TFMonitor v1.21.0.0`)로 찾습니다. 같은 이름의 탐색기 폴더 창에 잘못 붙지 않도록 버전 표기까지 매칭합니다.
+
+### 관리자 권한 (중요)
+
+TFMonitor는 EC/센서 드라이버에 접근하므로 관리자 권한이 필요하고, Windows **UIPI**는 일반 권한 프로세스가 관리자 권한 창에 보내는 클릭/텍스트 읽기 메시지를 **오류 없이 무시**합니다. 그래서 TFMonitor만 UAC로 올려 실행하면 "실행은 됐는데 Start가 안 눌리고 값이 비어 있는" 상태가 됩니다.
+
+확실히 동작하는 구성은 **이 프로그램을 관리자 권한으로 실행 → TFMonitor를 직접 실행해 권한을 상속**시키는 것입니다.
+
+| 방법 | |
+|---|---|
+| GUI | TFMonitor 연동이 켜진 상태에서 [시작]/[연결 테스트]를 누르면 관리자 권한 재실행을 제안합니다 (설정 유지). "관리자 권한으로 다시 실행" 버튼도 있습니다. 관리자 권한이면 창 제목에 `[관리자]`가 붙습니다. |
+| CLI | `--elevate` 옵션, 또는 관리자 권한 명령 프롬프트에서 실행 |
+| 권한 확인 끄기 | TFMonitor가 일반 권한에서도 동작하는 환경이면 GUI의 "관리자 권한 필요" 체크 해제 / CLI `--tfmon-no-admin` |
+
+연결 시 다음 상황은 시나리오 시작 전에 원인을 알려 주고 중단합니다.
+
+- 이 프로그램이 일반 권한인데 TFMonitor가 관리자 권한으로 이미 실행 중 (UIPI 차단)
+- TFMonitor exe가 관리자 권한을 요구(ERROR_ELEVATION_REQUIRED, 740)하는데 이 프로그램이 일반 권한
+- TFMonitor가 실행 직후 종료됨 (드라이버 로드 실패 등, exit code 표시)
+- 실행했지만 창이 제한 시간 안에 나타나지 않음 (오류 대화상자, 창 제목 불일치)
+
+Start 클릭 후 10초 동안 값이 비어 있으면 경고를 남깁니다.
 
 ### FAN 분석 결과물
 

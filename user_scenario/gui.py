@@ -29,7 +29,7 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 from .config import NAVER_KEYWORDS, QUALITIES, SCENARIOS, YOUTUBE_QUERIES, ScenarioConfig
 from .runner import Step, build_plan, planned_total, run_scenario
 from .tfmonitor import DEFAULT_TITLE_RE, FIELDS, TFMonitorSettings, default_client_factory, parse_number
-from .utils import add_log_handler
+from .utils import add_log_handler, is_admin, relaunch_as_admin
 
 SETTINGS_PATH = Path.home() / ".user_scenario_gui.json"
 BROWSERS = {"Playwright Chromium": None, "Microsoft Edge": "msedge", "Google Chrome": "chrome"}
@@ -85,7 +85,7 @@ class ScenarioRow:
 class ControllerApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("User Scenario Controller")
+        self.title("User Scenario Controller" + (" [관리자]" if sys.platform == "win32" and is_admin() else ""))
         self.minsize(1100, 700)
         style = ttk.Style(self)
         for theme in ("vista", "clam"):
@@ -216,6 +216,7 @@ class ControllerApp(tk.Tk):
         self.tf_title_var = tk.StringVar(value=DEFAULT_TITLE_RE)
         self.tf_interval_var = tk.StringVar(value="1.0")
         self.tf_stop_var = tk.BooleanVar(value=True)
+        self.tf_admin_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(tf, text="사용 (Start 클릭 → 종료까지 로깅 → 그래프 생성)",
                         variable=self.tf_enabled_var).grid(row=0, column=0, columnspan=4, sticky="w")
         ttk.Label(tf, text="TFMonitor.exe").grid(row=1, column=0, sticky="w", pady=(4, 0))
@@ -231,6 +232,12 @@ class ControllerApp(tk.Tk):
             row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.tf_test_btn = ttk.Button(tf, text="연결 테스트", command=self.test_tfmonitor)
         self.tf_test_btn.grid(row=3, column=2, columnspan=2, sticky="e", pady=(4, 0))
+        ttk.Checkbutton(tf, text="관리자 권한 필요 (권장)", variable=self.tf_admin_var).grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        admin = is_admin()
+        self.admin_btn = ttk.Button(tf, text="현재: 관리자 권한" if admin else "관리자 권한으로 다시 실행",
+                                    command=self.relaunch_admin, state="disabled" if admin else "normal")
+        self.admin_btn.grid(row=4, column=2, columnspan=2, sticky="e", pady=(4, 0))
         for v in (self.tf_enabled_var, self.tf_title_var, self.tf_interval_var):
             v.trace_add("write", self.on_change)
 
@@ -366,6 +373,7 @@ class ControllerApp(tk.Tk):
             tfmon_title_re=tf_title,
             tfmon_interval=num(self.tf_interval_var, "TFMonitor 샘플링 주기", 0.2),
             tfmon_click_stop=self.tf_stop_var.get(),
+            tfmon_require_admin=self.tf_admin_var.get(),
         )
 
     def on_change(self, *_) -> None:
@@ -404,6 +412,8 @@ class ControllerApp(tk.Tk):
             return
         if not cfg.scenarios:
             messagebox.showerror("설정 오류", "실행할 시나리오를 1개 이상 선택하세요")
+            return
+        if cfg.tfmon_enabled and not self._admin_ok(cfg):
             return
         self._save_settings()
         self.stop_event.clear()
@@ -546,7 +556,10 @@ class ControllerApp(tk.Tk):
         except ValueError as e:
             messagebox.showerror("설정 오류", str(e))
             return
-        settings = TFMonitorSettings(exe_path=cfg.tfmon_exe, title_re=cfg.tfmon_title_re, backend=cfg.tfmon_backend)
+        if not self._admin_ok(cfg):
+            return
+        settings = TFMonitorSettings(exe_path=cfg.tfmon_exe, title_re=cfg.tfmon_title_re, backend=cfg.tfmon_backend,
+                                     require_admin=cfg.tfmon_require_admin)
         self.tf_test_btn.configure(state="disabled")
 
         def work() -> None:
@@ -563,6 +576,34 @@ class ControllerApp(tk.Tk):
                 self.q.put(("tftest", False, f"{e}"))
 
         threading.Thread(target=work, daemon=True, name="TFMonitorTest").start()
+
+    def _admin_ok(self, cfg: ScenarioConfig) -> bool:
+        """TFMonitor 연동 전 권한 확인. 관리자 권한이 아니면 재실행을 제안."""
+        if not cfg.tfmon_require_admin or is_admin():
+            return True
+        if messagebox.askyesno(
+                "관리자 권한 필요",
+                "TFMonitor 는 EC/센서 접근 때문에 관리자 권한으로 실행되어야 하고,\n"
+                "Windows 보안(UIPI) 때문에 이 프로그램도 관리자 권한이어야\n"
+                "Start 클릭과 값 읽기가 가능합니다.\n\n"
+                "관리자 권한으로 다시 실행할까요? (현재 설정은 저장됩니다)"):
+            self.relaunch_admin()
+        return False
+
+    def relaunch_admin(self) -> None:
+        if is_admin():
+            messagebox.showinfo("관리자 권한", "이미 관리자 권한으로 실행 중입니다")
+            return
+        if self.worker and self.worker.is_alive():
+            messagebox.showwarning("관리자 권한", "시나리오 실행 중에는 다시 실행할 수 없습니다")
+            return
+        self._save_settings()
+        try:
+            relaunch_as_admin(["-m", "user_scenario", "--gui"])
+        except OSError as e:
+            messagebox.showerror("관리자 권한", str(e))
+            return
+        self.destroy()
 
     def open_fan_graph(self) -> None:
         if self.fan_graph and self.fan_graph.exists():
@@ -598,7 +639,7 @@ class ControllerApp(tk.Tk):
             "videos": self.videos_txt.get("1.0", "end").strip(),
             "tf_enabled": self.tf_enabled_var.get(), "tf_exe": self.tf_exe_var.get(),
             "tf_title": self.tf_title_var.get(), "tf_interval": self.tf_interval_var.get(),
-            "tf_stop": self.tf_stop_var.get(),
+            "tf_stop": self.tf_stop_var.get(), "tf_admin": self.tf_admin_var.get(),
         }
 
     def _save_settings(self, notify: bool = False) -> None:
@@ -633,7 +674,7 @@ class ControllerApp(tk.Tk):
                      (self.monitor_var, "monitor"), (self.interval_var, "interval"), (self.out_var, "out"),
                      (self.tf_enabled_var, "tf_enabled"), (self.tf_exe_var, "tf_exe"),
                      (self.tf_title_var, "tf_title"), (self.tf_interval_var, "tf_interval"),
-                     (self.tf_stop_var, "tf_stop")]
+                     (self.tf_stop_var, "tf_stop"), (self.tf_admin_var, "tf_admin")]
             for var, key in pairs:
                 if key in s:
                     var.set(s[key])
