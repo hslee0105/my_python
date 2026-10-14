@@ -21,8 +21,27 @@ YOUTUBE_QUERIES: list[str] = [
 ]
 
 
+# 선택 가능한 시나리오 (key → 표시 이름)
+SCENARIOS: dict[str, str] = {
+    "idle": "IDLE",
+    "web_surfing": "웹서핑 (네이버 검색)",
+    "youtube": "YouTube 영상 재생",
+}
+BROWSER_SCENARIOS = {"web_surfing", "youtube"}
+QUALITIES = ["auto", "tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160"]
+
+
 @dataclass
 class ScenarioConfig:
+    # 실행할 시나리오와 순서 (SCENARIOS 의 key)
+    scenarios: list[str] = field(default_factory=lambda: ["idle", "web_surfing", "youtube"])
+    # 시나리오 사이에 삽입할 IDLE 시간 [s] (0 이면 삽입 안 함)
+    gap_idle_seconds: float = 0.0
+    # 시나리오 전체 반복 횟수
+    loops: int = 1
+    # IDLE/간격 IDLE 구간에서 브라우저를 종료해 순수 시스템 idle 상태로 측정
+    close_browser_on_idle: bool = True
+
     # Phase 1: IDLE
     idle_seconds: float = 60.0
 
@@ -55,3 +74,13 @@ class ScenarioConfig:
     enable_monitor: bool = True
     keep_awake: bool = True
     seed: int | None = None
+
+    def planned_seconds(self, scenario: str) -> float | None:
+        """시나리오 1회 예상 소요 시간 [s]. 영상 끝까지 재생 모드면 None(미정)."""
+        if scenario == "idle":
+            return self.idle_seconds
+        if scenario == "web_surfing":
+            return self.surfing_seconds
+        if scenario == "youtube":
+            return self.video_count * self.video_seconds if self.video_seconds > 0 else None
+        raise ValueError(f"알 수 없는 시나리오: {scenario}")

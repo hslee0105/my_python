@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
 import time
 from urllib.parse import quote_plus
 
@@ -31,13 +32,15 @@ RESULT_LINK_SELECTORS = [
 class NaverSurfingPhase:
     def __init__(self, context: BrowserContext, seconds: float, keywords: list[str],
                  dwell_range: tuple[float, float] = (8.0, 15.0),
-                 click_prob: float = 0.5, rng: random.Random | None = None) -> None:
+                 click_prob: float = 0.5, rng: random.Random | None = None,
+                 stop_event: threading.Event | None = None) -> None:
         self.context = context
         self.seconds = seconds
         self.keywords = keywords
         self.dwell_range = dwell_range
         self.click_prob = click_prob
         self.rng = rng or random.Random()
+        self.stop = stop_event or threading.Event()
         self.searched: list[str] = []
 
     # ------------------------------------------------------------------ public
@@ -63,14 +66,16 @@ class NaverSurfingPhase:
                 page = self._recover_page(page)
                 self._sleep(3.0)  # 네트워크 장애 시 tight retry loop 방지
 
+        self._sleep(self._remaining())  # 페이즈 길이를 설정값에 맞춤 (외부 측정 로그 정렬용)
         log.info("웹서핑 완료 - 검색 %d회: %s", len(self.searched), self.searched)
 
     # ----------------------------------------------------------------- helpers
     def _remaining(self) -> float:
-        return self.deadline - time.monotonic()
+        # 중단 요청 시 0 을 반환해 모든 루프가 자연스럽게 빠져나오도록 함
+        return 0.0 if self.stop.is_set() else self.deadline - time.monotonic()
 
     def _sleep(self, sec: float) -> None:
-        time.sleep(max(0.0, min(sec, self._remaining())))
+        self.stop.wait(max(0.0, min(sec, self._remaining())))
 
     def _search(self, page: Page, keyword: str) -> None:
         log.info("네이버 검색: '%s'", keyword)
@@ -103,7 +108,7 @@ class NaverSurfingPhase:
     def _scroll_for(self, page: Page, seconds: float, direction: int = 1) -> None:
         """휠 스크롤을 일정 간격으로 발생시켜 사람의 읽기 패턴을 흉내낸다."""
         end = time.monotonic() + min(seconds, self._remaining())
-        while time.monotonic() < end:
+        while time.monotonic() < end and not self.stop.is_set():
             page.mouse.wheel(0, direction * self.rng.randint(200, 600))
             self._sleep(self.rng.uniform(0.6, 1.5))
 

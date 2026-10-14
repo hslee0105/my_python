@@ -21,13 +21,21 @@ except ImportError:  # psutil 없이도 시나리오는 동작
 log = logging.getLogger("scenario")
 
 
-def setup_logging(log_path: Path) -> None:
-    fmt = logging.Formatter("%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s", "%H:%M:%S")
+LOG_FORMAT = logging.Formatter("%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s", "%H:%M:%S")
+
+
+def add_log_handler(handler: logging.Handler) -> logging.Handler:
+    """root logger 에 핸들러 추가 (CLI: stdout, GUI: 큐, 실행별: 파일)."""
     root = logging.getLogger()
     root.setLevel(logging.INFO)
-    for handler in (logging.StreamHandler(sys.stdout), logging.FileHandler(log_path, encoding="utf-8")):
-        handler.setFormatter(fmt)
-        root.addHandler(handler)
+    handler.setFormatter(LOG_FORMAT)
+    root.addHandler(handler)
+    return handler
+
+
+def remove_log_handler(handler: logging.Handler) -> None:
+    logging.getLogger().removeHandler(handler)
+    handler.close()
 
 
 class PhaseRecorder:

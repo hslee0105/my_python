@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import asdict, dataclass
 from urllib.parse import quote_plus
@@ -76,7 +77,7 @@ class VideoStat:
 class YouTubePhase:
     def __init__(self, context: BrowserContext, targets: list[str], count: int = 3,
                  play_seconds: float = 60.0, quality: str = "hd1080", mute: bool = False,
-                 on_video=None) -> None:
+                 on_video=None, stop_event: threading.Event | None = None) -> None:
         self.context = context
         self.targets = targets
         self.count = count
@@ -85,11 +86,14 @@ class YouTubePhase:
         self.mute = mute
         self.on_video = on_video  # 영상별 페이즈 마커 기록용 콜백(context manager factory)
         self.stats: list[VideoStat] = []
+        self.stop = stop_event or threading.Event()
 
     def run(self) -> list[VideoStat]:
         page = self.context.pages[0] if self.context.pages else self.context.new_page()
         played_urls: set[str] = set()
         for i in range(self.count):
+            if self.stop.is_set():
+                break
             target = self.targets[i % len(self.targets)]
             stat = VideoStat(index=i + 1, target=target)
             self.stats.append(stat)
@@ -142,7 +146,9 @@ class YouTubePhase:
             dt, prev_tick = now - prev_tick, now
             s = page.evaluate(JS_STATUS)
             if s is None:
-                time.sleep(0.5)
+                if self.stop.wait(0.5):
+                    stat.status = "stopped"
+                    return
                 continue
 
             if s["ad"]:
@@ -178,7 +184,9 @@ class YouTubePhase:
             if now - started > limit:
                 stat.status = "timeout"
                 break
-            time.sleep(1.0)
+            if self.stop.wait(1.0):
+                stat.status = "stopped"
+                break
 
         stat.played_s = round(content_s, 1)
         stat.ad_s = round(stat.ad_s, 1)

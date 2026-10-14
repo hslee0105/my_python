@@ -2,7 +2,7 @@
 
 전력/발열/성능 측정용 표준 사용자 시나리오를 Playwright로 자동 실행합니다.
 
-| Phase | 내용 | 기본값 |
+| 시나리오 | 내용 | 기본값 |
 |---|---|---|
 | 1. `idle` | 브라우저 미실행 상태로 대기 (baseline) | 60 s |
 | 2. `web_surfing` | 네이버 메인 → 랜덤 키워드 타이핑/검색 → 휠 스크롤 → 확률적으로 결과 링크 클릭 → 반복 | 60 s |
@@ -32,6 +32,31 @@ python -m user_scenario --keywords "노트북" "GPU" "날씨" --seed 42
 ```
 
 전체 옵션은 `python -m user_scenario --help`를 참고하세요.
+
+### 시나리오 선택 · 순서 · 간격 IDLE (CLI)
+
+```bash
+# 웹서핑 → YouTube 순서로, 시나리오 사이에 30초 IDLE 삽입, 2회 반복
+python -m user_scenario --scenarios web_surfing youtube --gap 30 --loops 2
+```
+
+`--gap`으로 넣은 간격 IDLE은 반복 회차 사이에도 들어가며, `phases.csv`에 `gap_idle`로 기록됩니다.
+기본적으로 IDLE/간격 IDLE 구간에서는 브라우저를 닫습니다(`--keep-browser`로 유지). 브라우저 기동은 페이즈 마커 밖에서 수행되므로 측정 구간에 섞이지 않습니다.
+
+## GUI Controller
+
+```bash
+python -m user_scenario --gui
+```
+
+- **시나리오 선택 · 순서 · 유지 시간**: 체크한 시나리오를 위에서부터 실행, ▲/▼로 순서 변경. IDLE·웹서핑은 유지 시간, YouTube는 영상 수와 영상당 재생 시간(0 = 끝까지).
+- **실행 설정**: 시나리오 사이 IDLE 시간, 반복 횟수, IDLE 구간 브라우저 종료 여부.
+- **브라우저 · 측정 옵션**: 브라우저(Edge/Chrome/Playwright Chromium), 화질, 음소거, 리소스 모니터링, 결과 폴더.
+- **키워드 · 영상 목록**: 네이버 검색 키워드, YouTube URL/검색어를 한 줄에 하나씩 편집.
+- 실행 계획 미리보기(순서와 예상 총 소요 시간), 현재 단계/전체 진행률, 실시간 로그, ■ 중지, 결과 폴더 열기.
+- 설정은 `~/.user_scenario_gui.json`에 자동 저장되어 다음 실행 때 복원됩니다.
+
+중지 버튼을 누르면 IDLE은 즉시, 브라우저 동작은 진행 중인 단일 동작(최대 Playwright timeout 15 s)이 끝나는 대로 멈추고 그때까지의 결과 파일을 정리합니다.
 
 ## 결과물 (`results/<YYYYMMDD_HHMMSS>/`)
 
