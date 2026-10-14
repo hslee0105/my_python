@@ -1,0 +1,107 @@
+name: Build Windows release
+
+# Windows 배포판(exe) 빌드 → 스모크 테스트 → zip 아티팩트 → (버전 태그가 없으면) GitHub Release 생성
+on:
+  push:
+    branches: [master, "claude/peaceful-ptolemy-yw3sl8"]
+    paths:
+      - "user_scenario/**"
+      - "packaging/**"
+      - ".github/workflows/build-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r packaging/requirements-build.txt
+
+      - name: Read version
+        id: ver
+        run: |
+          $v = python -c "import user_scenario; print(user_scenario.__version__)"
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "Version: $v"
+
+      - name: Build (PyInstaller)
+        run: pyinstaller packaging/user_scenario.spec --noconfirm --clean
+
+      - name: Smoke test - CLI / IDLE / FAN analysis / GUI
+        run: |
+          $D = "dist\UserScenario"
+          & "$D\UserScenarioCLI.exe" --version
+          if ($LASTEXITCODE) { throw "--version failed" }
+
+          # Playwright 드라이버 기동 포함 (IDLE 만 실행)
+          & "$D\UserScenarioCLI.exe" --scenarios idle --idle 2 --out smoke\idle
+          if ($LASTEXITCODE) { throw "idle scenario failed" }
+
+          # matplotlib/numpy 번들 + 한글 폰트(Malgun Gothic) 그래프 생성
+          python packaging/make_sample_fan.py smoke\fan
+          & "$D\UserScenarioCLI.exe" fan-analysis smoke\fan
+          if ($LASTEXITCODE) { throw "fan-analysis failed" }
+          if (-not (Test-Path smoke\fan\fan_timeline.png)) { throw "fan_timeline.png missing" }
+
+          # tkinter GUI 생성/종료 (windowed exe)
+          $p = Start-Process "$D\UserScenario.exe" -ArgumentList "--selftest" -Wait -PassThru
+          if ($p.ExitCode) { throw "GUI selftest failed: $($p.ExitCode)" }
+
+      - name: Smoke test - real Edge (Naver / YouTube)
+        continue-on-error: true  # 외부 사이트 상태에 따라 달라지므로 빌드 실패로 보지 않음
+        run: |
+          $D = "dist\UserScenario"
+          & "$D\UserScenarioCLI.exe" --browser msedge --headless --mute `
+            --scenarios web_surfing youtube --surf 30 --video-count 2 --video-seconds 15 --gap 3 `
+            --out smoke\browser
+          Get-ChildItem smoke\browser\*\run.log | Get-Content
+          Get-ChildItem smoke\browser\*\youtube.csv -ErrorAction SilentlyContinue | Get-Content
+
+      - name: Package zip
+        id: pkg
+        run: |
+          Copy-Item packaging\README_KR.txt dist\UserScenario\
+          $zip = "UserScenario-v${{ steps.ver.outputs.version }}-win64.zip"
+          Compress-Archive -Path dist\UserScenario -DestinationPath $zip -Force
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+          "{0:N1} MB" -f ((Get-Item $zip).Length / 1MB)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UserScenario-v${{ steps.ver.outputs.version }}-win64
+          path: ${{ steps.pkg.outputs.zip }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-results
+          path: smoke
+          if-no-files-found: ignore
+
+      - name: Create GitHub Release (if version tag does not exist)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v${{ steps.ver.outputs.version }}"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) { "Release $tag already exists - skip"; exit 0 }
+          gh release create $tag "${{ steps.pkg.outputs.zip }}" `
+            --target $env:GITHUB_SHA `
+            --title "User Scenario Controller $tag" `
+            --notes-file packaging/RELEASE_NOTES.md

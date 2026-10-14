@@ -1,0 +1,10 @@
+# 배포(exe) 빌드용 고정 버전 - Linux 빌드로 검증한 조합
+# (PyInstaller 6.11 은 numpy 2.5 의 numpy._core 하위 모듈을 수집하지 못해 그래프 생성이 실패함)
+playwright==1.64.0
+matplotlib==3.11.2
+numpy==2.5.4
+pillow==12.3.0
+psutil==7.2.2
+pywinauto==0.6.9; sys_platform == "win32"
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.8
