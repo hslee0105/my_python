@@ -180,6 +180,7 @@ def run_scenario(cfg: ScenarioConfig, stop_event: threading.Event | None = None,
                             stats = YouTubePhase(
                                 context, cfg.youtube_targets, cfg.video_count, cfg.video_seconds,
                                 cfg.video_quality, cfg.mute, on_video=recorder.phase, stop_event=stop,
+                                diag_dir=out,
                             ).run()
                             video_rows += [(step.loop, s) for s in stats]
             finally:

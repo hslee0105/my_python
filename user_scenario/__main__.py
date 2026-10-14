@@ -22,7 +22,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import QUALITIES, SCENARIOS, ScenarioConfig
-from .utils import add_log_handler, is_admin, relaunch_as_admin
+from .utils import add_log_handler, is_admin, relaunch_as_admin, setup_console_encoding
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -90,6 +90,7 @@ def config_from_args(a: argparse.Namespace) -> ScenarioConfig:
 
 
 def main(argv: list[str] | None = None) -> int:
+    setup_console_encoding()
     argv = sys.argv[1:] if argv is None else argv
     a = parse_args(argv)
     needs_admin = a.gui or (a.tfmon and not a.tfmon_no_admin)

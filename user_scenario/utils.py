@@ -24,6 +24,24 @@ log = logging.getLogger("scenario")
 LOG_FORMAT = logging.Formatter("%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s", "%H:%M:%S")
 
 
+def setup_console_encoding() -> None:
+    """콘솔/파이프 출력에서 한글·기호(▶■→) 때문에 UnicodeEncodeError 가 나지 않도록 설정.
+
+    - 파이프/리다이렉트(CI, 파일 저장): UTF-8 로 출력
+    - 실제 콘솔: 인코딩은 유지하고 표현 불가 문자만 '?' 로 대체 (영문 Windows cp1252 등)
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            if stream.isatty():
+                stream.reconfigure(errors="replace")
+            else:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def add_log_handler(handler: logging.Handler) -> logging.Handler:
     """root logger 에 핸들러 추가 (CLI: stdout, GUI: 큐, 실행별: 파일)."""
     root = logging.getLogger()

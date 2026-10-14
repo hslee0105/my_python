@@ -9,6 +9,9 @@ import sys
 
 
 def main() -> int:
+    from user_scenario.utils import setup_console_encoding
+
+    setup_console_encoding()
     argv = sys.argv[1:]
     if argv[:1] == ["fan-analysis"]:
         from user_scenario.fan_analysis import main as fan_main

@@ -13,12 +13,24 @@ import time
 from dataclasses import asdict, dataclass
 from urllib.parse import quote_plus
 
+from pathlib import Path
+
 from playwright.sync_api import BrowserContext, Page
+from playwright.sync_api import TimeoutError as PWTimeout
 
 log = logging.getLogger("scenario.youtube")
 
 SEARCH_URL = "https://www.youtube.com/results?search_query={q}"
 SKIP_AD_SELECTORS = ".ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern"
+# <video> 가 안 뜰 때 원인 추정용 문구 (페이지 본문 기준, 소문자 비교)
+BLOCK_PATTERNS = {
+    "봇 확인/로그인 요구 (데이터센터·VPN IP 차단 가능)": ["confirm you're not a bot", "confirm you’re not a bot",
+                                                 "봇이 아님을 확인", "sign in to confirm"],
+    "연령 확인 필요": ["confirm your age", "연령 확인", "age-restricted"],
+    "재생 불가 영상": ["video unavailable", "동영상을 재생할 수 없습니다", "this video isn't available",
+                  "이 동영상은 사용할 수 없습니다"],
+    "쿠키/약관 동의 화면": ["before you continue", "계속하기 전에"],
+}
 CONSENT_SELECTORS = [  # EU 등 일부 지역 쿠키 동의창
     "button[aria-label^='Accept all']",
     "button[aria-label^='모두 수락']",
@@ -77,7 +89,8 @@ class VideoStat:
 class YouTubePhase:
     def __init__(self, context: BrowserContext, targets: list[str], count: int = 3,
                  play_seconds: float = 60.0, quality: str = "hd1080", mute: bool = False,
-                 on_video=None, stop_event: threading.Event | None = None) -> None:
+                 on_video=None, stop_event: threading.Event | None = None,
+                 diag_dir: Path | None = None) -> None:
         self.context = context
         self.targets = targets
         self.count = count
@@ -87,6 +100,7 @@ class YouTubePhase:
         self.on_video = on_video  # 영상별 페이즈 마커 기록용 콜백(context manager factory)
         self.stats: list[VideoStat] = []
         self.stop = stop_event or threading.Event()
+        self.diag_dir = diag_dir  # 재생 실패 시 스크린샷 저장 위치
 
     def run(self) -> list[VideoStat]:
         page = self.context.pages[0] if self.context.pages else self.context.new_page()
@@ -131,7 +145,7 @@ class YouTubePhase:
         log.info("재생 시작: %s", url)
         page.goto(url, wait_until="domcontentloaded", timeout=20_000)
         self._dismiss_consent(page)
-        page.wait_for_selector("video", state="attached", timeout=20_000)
+        self._wait_video(page, stat)
 
         quality_set = False
         last_t, last_progress = -1.0, time.monotonic()
@@ -199,6 +213,39 @@ class YouTubePhase:
         if stat.total_frames:
             stat.drop_rate_pct = round(100 * stat.dropped_frames / stat.total_frames, 3)
         page.evaluate("() => { const v = document.querySelector('video'); if (v) v.pause(); }")
+
+    def _wait_video(self, page: Page, stat: VideoStat) -> None:
+        """<video> 대기. 실패하면 원인 진단(스크린샷/차단 문구) 후 1회 새로고침 재시도."""
+        for attempt in (1, 2):
+            try:
+                page.wait_for_selector("video", state="attached", timeout=20_000)
+                return
+            except PWTimeout:
+                reason = self._diagnose(page, stat.index, attempt)
+                if attempt == 1:
+                    log.warning("영상 %d: <video> 없음 (%s) → 새로고침 후 재시도", stat.index, reason)
+                    page.reload(wait_until="domcontentloaded", timeout=20_000)
+                    self._dismiss_consent(page)
+        raise RuntimeError(f"<video> 요소 없음 - {reason}")
+
+    def _diagnose(self, page: Page, index: int, attempt: int) -> str:
+        try:
+            title = page.title()
+            body = (page.inner_text("body", timeout=3_000) or "").lower()
+        except Exception as e:
+            return f"페이지 확인 실패: {e!r}"[:200]
+        reason = next((name for name, pats in BLOCK_PATTERNS.items() if any(p in body for p in pats)),
+                      "원인 미상")
+        shot = ""
+        if self.diag_dir is not None:
+            path = self.diag_dir / f"youtube_fail_v{index}_try{attempt}.png"
+            try:
+                page.screenshot(path=str(path))
+                shot = f", 스크린샷 {path.name}"
+            except Exception:
+                pass
+        log.warning("영상 %d 진단: %s | 제목 '%s' | URL %s%s", index, reason, title, page.url, shot)
+        return reason
 
     @staticmethod
     def _skip_ad(page: Page) -> None:
